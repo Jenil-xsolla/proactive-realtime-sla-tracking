@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
-import { slaPirReviews, type Database } from "@/data";
+import { eq, inArray, sql } from "drizzle-orm";
+import { slaOutages, slaPirReviews, type Database, type UnresolvedValue } from "@/data";
+import type { CaptureRow } from "@/ingestion/resolution";
 
 export type ReceiptKind = "new" | "retry" | "redelivery";
 
@@ -7,6 +8,21 @@ export type ReceiptResult = {
   kind: ReceiptKind;
   version: number;
 };
+
+/**
+ * Values extracted from a PIR (spec §2 step 3), stored on the review row so
+ * the correction modal can prefill even when the PIR has zero rows (D4).
+ * `affectedServices` holds display names, not ARIs.
+ */
+export type ExtractedValues = {
+  incidentStarted: Date;
+  outageMinutes: number;
+  affectedServices: string[];
+  severity: string;
+  pirUrl: string;
+};
+
+export type CaptureResult = { kind: "written"; rowCount: number } | { kind: "corrected_untouched" };
 
 /**
  * Records receipt of a PIR before any other ingestion work runs (the core
@@ -64,6 +80,113 @@ export async function recordReceipt(db: Database, pirKey: string, now: Date): Pr
       .set({ status: "received", error: null, updatedAt: now })
       .where(eq(slaPirReviews.pirKey, pirKey));
     return { kind: "retry", version: row.version };
+  });
+}
+
+/**
+ * Writes the system-written `sla_outages` set for a PIR: one row per
+ * (partner, service), replacing the PIR's previous system-written set, and
+ * marks the review `captured` (spec §2 step 5). Runs as one transaction
+ * that locks the review row with `SELECT … FOR UPDATE`.
+ *
+ * A PIR is "corrected" per-PIR, from `version > 0` (D5), not per row. On a
+ * corrected PIR this is a no-op: the review row — including whatever
+ * extracted values a correction stored — is left completely untouched, and
+ * `{ kind: "corrected_untouched" }` is returned. A later correction task
+ * owns writing corrected values; redelivery must never overwrite them.
+ *
+ * On an uncorrected PIR (version 0): rows whose (partner, affected_service)
+ * pair isn't in `rows` are deleted (all of them, when `rows` is empty),
+ * then `rows` is upserted on `(pir_key, partner, affected_service)` as
+ * `source = 'pipeline'`, `decision_type = 'system_written'`, with reviewer
+ * fields null. The review is set to `captured` with the extracted values
+ * and `unresolved_values`.
+ */
+export async function captureRows(
+  db: Database,
+  input: { pirKey: string; extracted: ExtractedValues; rows: CaptureRow[]; unresolved: UnresolvedValue[] },
+  now: Date,
+): Promise<CaptureResult> {
+  return db.transaction(async (tx) => {
+    const reviewRows = await tx
+      .select({ version: slaPirReviews.version })
+      .from(slaPirReviews)
+      .where(eq(slaPirReviews.pirKey, input.pirKey))
+      .for("update");
+    const review = reviewRows[0];
+    if (!review) {
+      throw new Error(`captureRows: no sla_pir_reviews row for ${input.pirKey}; recordReceipt must run before this call`);
+    }
+
+    if (review.version > 0) {
+      return { kind: "corrected_untouched" };
+    }
+
+    const keepKeys = new Set(input.rows.map((row) => `${row.partner}\u0000${row.affectedService}`));
+    const existing = await tx
+      .select({ id: slaOutages.id, partner: slaOutages.partner, affectedService: slaOutages.affectedService })
+      .from(slaOutages)
+      .where(eq(slaOutages.pirKey, input.pirKey));
+    const idsToDelete = existing
+      .filter((row) => !keepKeys.has(`${row.partner}\u0000${row.affectedService}`))
+      .map((row) => row.id);
+    if (idsToDelete.length > 0) {
+      await tx.delete(slaOutages).where(inArray(slaOutages.id, idsToDelete));
+    }
+
+    if (input.rows.length > 0) {
+      await tx
+        .insert(slaOutages)
+        .values(
+          input.rows.map((row) => ({
+            pirKey: row.pirKey,
+            partner: row.partner,
+            partnerId: row.partnerId,
+            affectedService: row.affectedService,
+            incidentStarted: row.incidentStarted,
+            outageMinutes: String(row.outageMinutes),
+            severity: row.severity,
+            pirUrl: row.pirUrl,
+            source: "pipeline",
+            decisionType: "system_written",
+            reviewedBy: null,
+            reviewedAt: null,
+            reason: null,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [slaOutages.pirKey, slaOutages.partner, slaOutages.affectedService],
+          set: {
+            partnerId: sql`excluded.partner_id`,
+            incidentStarted: sql`excluded.incident_started`,
+            outageMinutes: sql`excluded.outage_minutes`,
+            severity: sql`excluded.severity`,
+            pirUrl: sql`excluded.pir_url`,
+            source: sql`excluded.source`,
+            decisionType: sql`excluded.decision_type`,
+            reviewedBy: sql`excluded.reviewed_by`,
+            reviewedAt: sql`excluded.reviewed_at`,
+            reason: sql`excluded.reason`,
+          },
+        });
+    }
+
+    await tx
+      .update(slaPirReviews)
+      .set({
+        status: "captured",
+        incidentStarted: input.extracted.incidentStarted,
+        outageMinutes: String(input.extracted.outageMinutes),
+        affectedServices: input.extracted.affectedServices,
+        severity: input.extracted.severity,
+        pirUrl: input.extracted.pirUrl,
+        unresolvedValues: input.unresolved,
+        error: null,
+        updatedAt: now,
+      })
+      .where(eq(slaPirReviews.pirKey, input.pirKey));
+
+    return { kind: "written", rowCount: input.rows.length };
   });
 }
 
