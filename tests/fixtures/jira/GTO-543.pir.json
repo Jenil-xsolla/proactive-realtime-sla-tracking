@@ -1,0 +1,26 @@
+{
+  "key": "GTO-543",
+  "fields": {
+    "summary": "PIR — GTO-542: Store API outage caused by MySQL replica failure",
+    "created": "2026-08-04T03:54:27.833+0500",
+    "customfield_31331": 42,
+    "customfield_11646": { "value": "L1 — Critical", "id": "36917" },
+    "customfield_10399": [
+      { "id": "ari:cloud:graph::service/6184b75d-f203-4004-be12-5899d49497d2/2201284c-d00a-11eb-8ed1-0abe3f4a6601" }
+    ],
+    "customfield_13920": {
+      "type": "doc", "version": 1,
+      "content": [
+        { "type": "paragraph", "content": [
+          { "type": "inlineCard", "attrs": { "url": "https://docs.google.com/spreadsheets/d/1aZfBoagUmZEa5cJJgP_tB85KI05aCiCbokyukqy_AXQ/edit?usp=sharing" } }
+        ] }
+      ]
+    },
+    "issuelinks": [
+      { "id": "1058105", "type": { "id": "10006", "name": "Problem/Incident" }, "inwardIssue": { "key": "GTO-542" } },
+      { "id": "1058297", "type": { "id": "11035", "name": "Action Point" }, "outwardIssue": { "key": "SYSADM-55050" } },
+      { "id": "1058653", "type": { "id": "11031", "name": "Post-Incident Reviews" }, "outwardIssue": { "key": "GTO-542" } },
+      { "id": "1059145", "type": { "id": "11904", "name": "Action item" }, "inwardIssue": { "key": "GTOC-28" } }
+    ]
+  }
+}
