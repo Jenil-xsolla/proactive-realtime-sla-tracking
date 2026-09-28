@@ -1,13 +1,13 @@
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { drizzle, type PgliteDatabase } from "drizzle-orm/pglite";
+import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import { schema } from "@/data/db";
+import { schema, type Database } from "@/data/db";
 
 const migrationsFolder = path.resolve(process.cwd(), "src/data/migrations");
 
 export interface TestDatabase {
-  db: PgliteDatabase<typeof schema>;
+  db: Database;
   client: PGlite;
   close: () => Promise<void>;
 }

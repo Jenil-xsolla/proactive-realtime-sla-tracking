@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { Pool } from "pg";
 import { slaAlertState } from "./schema/alert-state";
 import { slaOutages } from "./schema/outages";
@@ -10,7 +11,13 @@ export function createDatabase(connectionString: string) {
   return drizzle(pool, { schema });
 }
 
-export type Database = ReturnType<typeof createDatabase>;
+/**
+ * Driver-neutral so a PGlite-backed database (tests/support/database.ts)
+ * type-checks against the same signature as the node-postgres database
+ * this app runs in production. Writer/loader functions take `Database`,
+ * never a driver-specific type, so either driver can be passed in.
+ */
+export type Database = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 let database: Database | undefined;
 
