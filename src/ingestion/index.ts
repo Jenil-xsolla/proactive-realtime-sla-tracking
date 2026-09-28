@@ -21,3 +21,7 @@ export { triggerAlertRun } from "./notify/trigger-alerts";
 export type { TriggerAlertRunResult } from "./notify/trigger-alerts";
 export { defaultPirDeps, handlePirApproved } from "./handle-pir";
 export type { PirDeps, PirFetchIssue, PirOutcome, PirPostMessage, PirUpdateMessage } from "./handle-pir";
+export { defaultInteractionDeps, handleSlackInteraction } from "./handle-interaction";
+export type { InteractionDeps, InteractionOpenView, InteractionResult, InteractionTriggerAlerts, InteractionUpdateMessage } from "./handle-interaction";
+export { correctionModal, parseCorrectionSubmission } from "./notify/correction-modal";
+export type { CorrectionModalInput, CorrectionModalReview, ParsedCorrection } from "./notify/correction-modal";

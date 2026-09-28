@@ -1,5 +1,5 @@
-import { eq, inArray, sql } from "drizzle-orm";
-import { slaOutages, slaPirReviews, type Database, type UnresolvedValue } from "@/data";
+import { desc, eq, inArray, sql } from "drizzle-orm";
+import { slaOutageCorrections, slaOutages, slaPirReviews, type Database, type UnresolvedValue } from "@/data";
 import type { CaptureRow } from "@/ingestion/resolution";
 
 export type ReceiptKind = "new" | "retry" | "redelivery";
@@ -188,6 +188,286 @@ export async function captureRows(
 
     return { kind: "written", rowCount: input.rows.length };
   });
+}
+
+/**
+ * A row as it appears in `sla_outages` for correction purposes: the shape
+ * the correction modal prefills from and `applyCorrection`'s before/after
+ * history serialises (spec §3 "Handling a correction" step 3).
+ */
+export type OutageRow = {
+  partner: string;
+  partnerId: string | null;
+  affectedService: string;
+  incidentStarted: Date;
+  outageMinutes: number;
+  severity: string | null;
+  pirUrl: string | null;
+};
+
+/** The `{ partner, partnerId, affectedService, incidentStarted, outageMinutes, severity }` shape stored in `sla_outage_corrections.before`/`after`. */
+type CorrectionHistoryRow = {
+  partner: string;
+  partnerId: string | null;
+  affectedService: string;
+  incidentStarted: string;
+  outageMinutes: number;
+  severity: string | null;
+};
+
+function toHistoryRow(row: OutageRow): CorrectionHistoryRow {
+  return {
+    partner: row.partner,
+    partnerId: row.partnerId,
+    affectedService: row.affectedService,
+    incidentStarted: row.incidentStarted.toISOString(),
+    outageMinutes: row.outageMinutes,
+    severity: row.severity,
+  };
+}
+
+function captureRowToHistoryRow(row: CaptureRow): CorrectionHistoryRow {
+  return {
+    partner: row.partner,
+    partnerId: row.partnerId,
+    affectedService: row.affectedService,
+    incidentStarted: row.incidentStarted.toISOString(),
+    outageMinutes: row.outageMinutes,
+    severity: row.severity,
+  };
+}
+
+export type ApplyCorrectionInput = {
+  pirKey: string;
+  expectedVersion: number;
+  after: CaptureRow[];
+  extracted: ExtractedValues;
+  reason: string | null;
+  correctedBy: string;
+};
+
+export type ApplyCorrectionResult = { kind: "applied"; version: number } | { kind: "stale" };
+
+/**
+ * Applies a human correction to a PIR's row set (spec §3 "Handling a
+ * correction" step 3): in one transaction, records the before/after in
+ * `sla_outage_corrections`, replaces the (partner, service) row set —
+ * deleting rows no longer listed, upserting the rest as `human_corrected` —
+ * and bumps the review's version. A plain upsert is not enough: a removed
+ * partner or service would leave a stale row that keeps counting (see
+ * .claude/rules/ingestion.md).
+ *
+ * Locks the review row with `SELECT … FOR UPDATE`. If `expectedVersion`
+ * no longer matches — someone else corrected it first — returns `stale`
+ * with no writes at all, not even the history row.
+ */
+export async function applyCorrection(
+  db: Database,
+  input: ApplyCorrectionInput,
+  now: Date,
+): Promise<ApplyCorrectionResult> {
+  return db.transaction(async (tx) => {
+    const reviewRows = await tx
+      .select({ version: slaPirReviews.version })
+      .from(slaPirReviews)
+      .where(eq(slaPirReviews.pirKey, input.pirKey))
+      .for("update");
+    const review = reviewRows[0];
+    if (!review) {
+      throw new Error(`applyCorrection: no sla_pir_reviews row for ${input.pirKey}`);
+    }
+    if (review.version !== input.expectedVersion) {
+      return { kind: "stale" };
+    }
+
+    const existing = await tx
+      .select({
+        id: slaOutages.id,
+        partner: slaOutages.partner,
+        partnerId: slaOutages.partnerId,
+        affectedService: slaOutages.affectedService,
+        incidentStarted: slaOutages.incidentStarted,
+        outageMinutes: slaOutages.outageMinutes,
+        severity: slaOutages.severity,
+      })
+      .from(slaOutages)
+      .where(eq(slaOutages.pirKey, input.pirKey));
+
+    const before: CorrectionHistoryRow[] = existing.map((row) =>
+      toHistoryRow({
+        partner: row.partner,
+        partnerId: row.partnerId,
+        affectedService: row.affectedService,
+        incidentStarted: row.incidentStarted,
+        outageMinutes: Number(row.outageMinutes),
+        severity: row.severity,
+        pirUrl: null,
+      }),
+    );
+    const after: CorrectionHistoryRow[] = input.after.map(captureRowToHistoryRow);
+
+    await tx.insert(slaOutageCorrections).values({
+      pirKey: input.pirKey,
+      correctedBy: input.correctedBy,
+      correctedAt: now,
+      before,
+      after,
+      reason: input.reason,
+    });
+
+    const keepKeys = new Set(input.after.map((row) => `${row.partner}\u0000${row.affectedService}`));
+    const idsToDelete = existing
+      .filter((row) => !keepKeys.has(`${row.partner}\u0000${row.affectedService}`))
+      .map((row) => row.id);
+    if (idsToDelete.length > 0) {
+      await tx.delete(slaOutages).where(inArray(slaOutages.id, idsToDelete));
+    }
+
+    if (input.after.length > 0) {
+      await tx
+        .insert(slaOutages)
+        .values(
+          input.after.map((row) => ({
+            pirKey: row.pirKey,
+            partner: row.partner,
+            partnerId: row.partnerId,
+            affectedService: row.affectedService,
+            incidentStarted: row.incidentStarted,
+            outageMinutes: String(row.outageMinutes),
+            severity: row.severity,
+            pirUrl: row.pirUrl,
+            source: "pipeline",
+            decisionType: "human_corrected",
+            reviewedBy: input.correctedBy,
+            reviewedAt: now,
+            reason: input.reason,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [slaOutages.pirKey, slaOutages.partner, slaOutages.affectedService],
+          set: {
+            partnerId: sql`excluded.partner_id`,
+            incidentStarted: sql`excluded.incident_started`,
+            outageMinutes: sql`excluded.outage_minutes`,
+            severity: sql`excluded.severity`,
+            pirUrl: sql`excluded.pir_url`,
+            source: sql`excluded.source`,
+            decisionType: sql`excluded.decision_type`,
+            reviewedBy: sql`excluded.reviewed_by`,
+            reviewedAt: sql`excluded.reviewed_at`,
+            reason: sql`excluded.reason`,
+          },
+        });
+    }
+
+    const newVersion = review.version + 1;
+    await tx
+      .update(slaPirReviews)
+      .set({
+        version: newVersion,
+        status: "captured",
+        unresolvedValues: [],
+        incidentStarted: input.extracted.incidentStarted,
+        outageMinutes: String(input.extracted.outageMinutes),
+        affectedServices: input.extracted.affectedServices,
+        severity: input.extracted.severity,
+        pirUrl: input.extracted.pirUrl,
+        error: null,
+        updatedAt: now,
+      })
+      .where(eq(slaPirReviews.pirKey, input.pirKey));
+
+    return { kind: "applied", version: newVersion };
+  });
+}
+
+/**
+ * Reads a PIR's current `sla_outages` rows in the shape the correction
+ * modal prefills from and `applyCorrection`'s history serialises. Ordered
+ * for stable snapshots in tests and messages.
+ */
+export async function getOutageRows(db: Database, pirKey: string): Promise<OutageRow[]> {
+  const rows = await db
+    .select({
+      partner: slaOutages.partner,
+      partnerId: slaOutages.partnerId,
+      affectedService: slaOutages.affectedService,
+      incidentStarted: slaOutages.incidentStarted,
+      outageMinutes: slaOutages.outageMinutes,
+      severity: slaOutages.severity,
+      pirUrl: slaOutages.pirUrl,
+    })
+    .from(slaOutages)
+    .where(eq(slaOutages.pirKey, pirKey))
+    .orderBy(slaOutages.partner, slaOutages.affectedService);
+  return rows.map((row) => ({ ...row, outageMinutes: Number(row.outageMinutes) }));
+}
+
+export type ReviewForCorrection = { version: number; extracted: ExtractedValues };
+
+/**
+ * Reads the version and extracted values the correction flow needs: the
+ * "Correct" click loads this to build the modal (with `getOutageRows`),
+ * and the submission handler loads it again for the PIR's `pir_url`
+ * (spec §3, D4 — the extracted values make prefill possible even with
+ * zero rows). `undefined` when the PIR has never been captured, so there
+ * is nothing to correct yet.
+ */
+export async function getReviewForCorrection(db: Database, pirKey: string): Promise<ReviewForCorrection | undefined> {
+  const rows = await db
+    .select({
+      version: slaPirReviews.version,
+      incidentStarted: slaPirReviews.incidentStarted,
+      outageMinutes: slaPirReviews.outageMinutes,
+      affectedServices: slaPirReviews.affectedServices,
+      severity: slaPirReviews.severity,
+      pirUrl: slaPirReviews.pirUrl,
+    })
+    .from(slaPirReviews)
+    .where(eq(slaPirReviews.pirKey, pirKey));
+  const row = rows[0];
+  if (
+    !row ||
+    row.incidentStarted === null ||
+    row.outageMinutes === null ||
+    row.severity === null ||
+    row.pirUrl === null
+  ) {
+    return undefined;
+  }
+  return {
+    version: row.version,
+    extracted: {
+      incidentStarted: row.incidentStarted,
+      outageMinutes: Number(row.outageMinutes),
+      affectedServices: row.affectedServices ?? [],
+      severity: row.severity,
+      pirUrl: row.pirUrl,
+    },
+  };
+}
+
+export type LatestCorrection = { by: string; at: Date };
+
+/**
+ * Reads the most recent correction on record for a PIR, so the correction
+ * followUp can render "Last corrected by" from the actual latest write
+ * rather than the submission that happened to be running it — two
+ * corrections can race, and `after()` callbacks are not guaranteed to run
+ * in submission order. `undefined` if the PIR has never been corrected.
+ */
+export async function getLatestCorrection(db: Database, pirKey: string): Promise<LatestCorrection | undefined> {
+  const rows = await db
+    .select({ correctedBy: slaOutageCorrections.correctedBy, correctedAt: slaOutageCorrections.correctedAt })
+    .from(slaOutageCorrections)
+    .where(eq(slaOutageCorrections.pirKey, pirKey))
+    .orderBy(desc(slaOutageCorrections.correctedAt), desc(slaOutageCorrections.id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) {
+    return undefined;
+  }
+  return { by: row.correctedBy, at: row.correctedAt };
 }
 
 /**
