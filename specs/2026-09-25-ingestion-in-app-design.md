@@ -70,9 +70,9 @@ The engine and feed are unchanged. An ESLint rule stops anything outside `src/in
 | `reviewed_at` | timestamptz | time of the last correction; null unless `human_corrected` |
 | `pir_url` | text | |
 
-Unique on `(pir_key, partner, affected_service)`. A PIR affecting several services writes one row per (partner, service), identical apart from `affected_service` (D2). Check constraints: `decision_type` is null if and only if `source = 'backfill'`; `reviewed_by` is set if and only if `decision_type = 'human_corrected'`.
+Unique on `(pir_key, partner, affected_service)`. A PIR affecting several services writes one row per (partner, service), identical apart from `affected_service`. Check constraints: `decision_type` is null if and only if `source = 'backfill'`; `reviewed_by` is set if and only if `decision_type = 'human_corrected'`.
 
-**`sla_pir_reviews`**, keyed on `pir_key`: an ingestion log. Status (`received`, `skipped`, `captured`, `failed`), the extracted values (`incident_started`, `outage_minutes`, affected services, severity, `pir_url`) so the correction modal can prefill even when the PIR has zero rows (D4), unresolved values typed as `{ kind: 'merchant' | 'service_ari', raw }` (D6), the Slack channel and message timestamp, a version number incremented on every correction, error text, and received and updated timestamps. It makes a half-processed PIR visible instead of lost.
+**`sla_pir_reviews`**, keyed on `pir_key`: an ingestion log. Status (`received`, `skipped`, `captured`, `failed`), the extracted values (`incident_started`, `outage_minutes`, affected services, severity, `pir_url`) so the correction modal can prefill even when the PIR has zero rows, unresolved values typed as `{ kind: 'merchant' | 'service_ari', raw }`, the Slack channel and message timestamp, a version number incremented on every correction, error text, and received and updated timestamps. It makes a half-processed PIR visible instead of lost.
 
 **`sla_outage_corrections`**: one row per correction. `pir_key`, corrected by (Slack username), corrected at, the rows before and after (JSON), and the reason given.
 
@@ -82,13 +82,13 @@ Unique on `(pir_key, partner, affected_service)`. A PIR affecting several servic
 
 1. Jira Automation posts `{ issueKey }` to `/api/ingest/pir-approved` with a shared-secret header.
 2. **Record receipt first.** Insert into `sla_pir_reviews` with status `received`. A PIR already `captured` is handled as a redelivery (below).
-3. **Work inside the request.** Cloud Run throttles CPU after the response is sent, so background work silently stalls. Fetch the PIR. Outage minutes come from Jira field `customfield_31331` (D1); see the failure table (§4) for missing, zero or non-numeric values. Fetch the linked incident; see the failure table for a missing incident link or a missing incident field. Extract severity — see the failure table for L3/L4, a missing severity, and an unrecognised severity label — affected services (ARIs) and affected merchants.
-4. **Map ARIs and resolve merchants.** Map each ARI to its service through the registry; an ARI missing from the map is skipped and flagged as an unresolved value (`{ kind: 'service_ari', raw }`) — it does not fail the PIR (D6). The merchants field (`customfield_13920`, ADF) is read by deterministic scan of the normalised text, not split into tokens (E2): every standalone digit run (`\b\d+\b`) is a merchant-ID candidate, and every registry partner display name or alias found at word boundaries in the text is a name match. No model is involved. A merchant-ID match wins over a name match for the same partner, and matched partners dedupe by registry id. A digit run matching no registry `merchantIds` entry is a non-pilot merchant: it is ignored, not treated as unresolved, and its count is reported in the capture message (E1). If the text has no pilot-partner match and no digit run at all, the whole trimmed field text is recorded as one unresolved value (`{ kind: 'merchant', raw }`) so a person sees it; a null or empty field yields zero partners and no unresolved value. Each merchant value resolves into resolved partners, ignored non-pilot IDs, and unresolved values.
-5. **Write immediately.** Upsert one `sla_outages` row per resolved partner × mapped service — identical apart from `affected_service` (D2) — with `decision_type = system_written`, `source = pipeline`, no reviewer. Set status `captured`.
+3. **Work inside the request.** Cloud Run throttles CPU after the response is sent, so background work silently stalls. Fetch the PIR. Outage minutes come from Jira field `customfield_31331`; see the failure table (§4) for missing, zero or non-numeric values. Fetch the linked incident; see the failure table for a missing incident link or a missing incident field. Extract severity — see the failure table for L3/L4, a missing severity, and an unrecognised severity label — affected services (ARIs) and affected merchants.
+4. **Map ARIs and resolve merchants.** Map each ARI to its service through the registry; an ARI missing from the map is skipped and flagged as an unresolved value (`{ kind: 'service_ari', raw }`) — it does not fail the PIR. The merchants field (`customfield_13920`, ADF) is read by deterministic scan of the normalised text, not split into tokens: every standalone digit run (`\b\d+\b`) is a merchant-ID candidate, and every registry partner display name or alias found at word boundaries in the text is a name match. No model is involved. A merchant-ID match wins over a name match for the same partner, and matched partners dedupe by registry id. A digit run matching no registry `merchantIds` entry is a non-pilot merchant: it is ignored, not treated as unresolved, and its count is reported in the capture message. If the text has no pilot-partner match and no digit run at all, the whole trimmed field text is recorded as one unresolved value (`{ kind: 'merchant', raw }`) so a person sees it; a null or empty field yields zero partners and no unresolved value. Each merchant value resolves into resolved partners, ignored non-pilot IDs, and unresolved values.
+5. **Write immediately.** Upsert one `sla_outages` row per resolved partner × mapped service — identical apart from `affected_service` — with `decision_type = system_written`, `source = pipeline`, no reviewer. Set status `captured`.
 6. Post the capture message to the engineering channel and save its reference.
 7. Trigger the alert run, then respond 200.
 
-**Redelivery.** Whether a PIR is already corrected is decided per PIR, from its version number in `sla_pir_reviews` (`version > 0`), not per row (D5). If the version is 0, redelivery replaces the PIR's system-written row set wholesale: rows are upserted from the fresh Jira read, and rows Jira no longer lists are deleted; the existing capture message is edited in place, not re-posted (A9). If the version is greater than 0, the PIR is already corrected — its rows are never touched, even when a correction left it with zero rows — and the channel gets a note that Jira changed after a correction, so a person decides. Redelivery of a PIR still `received` (an earlier attempt died mid-request) or `skipped` re-runs it the same way as `failed` (A8). If an already-captured PIR now reads as no outage or below L2, its rows and status are left unchanged and the channel gets a note, so a person decides; a correction that clears every partner removes it. A row lock (`SELECT … FOR UPDATE`) on the PIR's `sla_pir_reviews` row serialises concurrent deliveries.
+**Redelivery.** Whether a PIR is already corrected is decided per PIR, from its version number in `sla_pir_reviews` (`version > 0`), not per row. If the version is 0, redelivery replaces the PIR's system-written row set wholesale: rows are upserted from the fresh Jira read, and rows Jira no longer lists are deleted; the existing capture message is edited in place, not re-posted. If the version is greater than 0, the PIR is already corrected — its rows are never touched, even when a correction left it with zero rows — and the channel gets a note that Jira changed after a correction, so a person decides. Redelivery of a PIR still `received` (an earlier attempt died mid-request) or `skipped` re-runs it the same way as `failed`. If an already-captured PIR now reads as no outage or below L2, its rows and status are left unchanged and the channel gets a note, so a person decides; a correction that clears every partner removes it. A row lock (`SELECT … FOR UPDATE`) on the PIR's `sla_pir_reviews` row serialises concurrent deliveries.
 
 **On failure at any step:** status `failed` with the error text, a notice to the engineering channel, and a 200 response, because Jira Automation does not retry. The PIR stays on record. Re-triggering its Jira Automation rule re-runs it; receipt handling allows `failed` to move back to `received`.
 
@@ -100,9 +100,9 @@ The dashboard's health panel shows failed PIRs and captured PIRs with unresolved
 
 > GTO-543 captured. It will appear on the dashboard.
 
-followed by `pir_key` (linked), and for each row: partner, `partner_id`, `incident_started`, `affected_service`, `outage_minutes` and severity. The message states the count of non-pilot merchant IDs ignored, if any (E1). Unresolved merchant values are still listed prominently, since they produce no rows until corrected. One button: **Correct**. It stays usable for as long as the message exists.
+followed by `pir_key` (linked), and for each row: partner, `partner_id`, `incident_started`, `affected_service`, `outage_minutes` and severity. The message states the count of non-pilot merchant IDs ignored, if any. Unresolved merchant values are still listed prominently, since they produce no rows until corrected. One button: **Correct**. It stays usable for as long as the message exists.
 
-**Correction modal:** a multi-select of registry partners prefilled with the current rows, a multi-select of registry services (`affected_service`) prefilled with the current rows (D2), fields for `incident_started`, `outage_minutes` and severity prefilled with current values, and a reason field. The partner and service options come from the registry. Clearing every partner means no pilot partner was affected.
+**Correction modal:** a multi-select of registry partners prefilled with the current rows, a multi-select of registry services (`affected_service`) prefilled with the current rows, fields for `incident_started`, `outage_minutes` and severity prefilled with current values, and a reason field. The partner and service options come from the registry. Clearing every partner means no pilot partner was affected.
 
 **Handling a correction:**
 
@@ -112,7 +112,7 @@ followed by `pir_key` (linked), and for each row: partner, `partner_id`, `incide
 4. Edit the capture message to show the current values and who last corrected them.
 5. Trigger the alert run.
 
-Slack requires a response within three seconds, and the modal must open within that window. `sla-ingestion` therefore runs with minimum instances set to 1 and CPU always allocated, instance-based billing, so a cold start never breaks a click and work started after the response keeps running (D7). The route commits, responds within the window, then runs `chat.update` and the alert trigger inside `after()`.
+Slack requires a response within three seconds, and the modal must open within that window. `sla-ingestion` therefore runs with minimum instances set to 1 and CPU always allocated, instance-based billing, so a cold start never breaks a click and work started after the response keeps running. The route commits, responds within the window, then runs `chat.update` and the alert trigger inside `after()`.
 
 **Accepted trade-offs**
 
@@ -126,12 +126,12 @@ Slack requires a response within three seconds, and the modal must open within t
 | Failure | Result |
 | --- | --- |
 | Jira fetch fails, or a required field is missing | `failed`, engineering notified |
-| Missing or zero `customfield_31331` (outage minutes) | `skipped` — no outage on this PIR (A3) |
-| Non-numeric `customfield_31331` | `failed` (A3) |
-| Missing incident link (type `11031`), or missing incident field `customfield_10068` | `failed`. The PIR's `created` time is a different moment that would skew the timeline, so this design does not fall back to it (A4) |
-| Missing severity (`customfield_11646.value`) | `failed` (A6) |
-| Severity is L3 or L4 (`"L3 — Limited"`, `"L4 — Minor"`) | `skipped` — only L0–L2 PIRs are captured, with a reason (E4) |
-| Severity label is neither L0–L4 | `failed` — unrecognised severity (E4) |
+| Missing or zero `customfield_31331` (outage minutes) | `skipped` — no outage on this PIR |
+| Non-numeric `customfield_31331` | `failed` |
+| Missing incident link (type `11031`), or missing incident field `customfield_10068` | `failed`. The PIR's `created` time is a different moment that would skew the timeline, so this design does not fall back to it |
+| Missing severity (`customfield_11646.value`) | `failed` |
+| Severity is L3 or L4 (`"L3 — Limited"`, `"L4 — Minor"`) | `skipped` — only L0–L2 PIRs are captured, with a reason |
+| Severity label is neither L0–L4 | `failed` — unrecognised severity |
 | Database write fails | `failed`, engineering notified; no capture message posted |
 | Slack rejects the capture message (`ok: false`) | Rows are written and visible on the dashboard. Retrying the same channel would likely fail the same way, so the PIR is flagged in the health panel as captured without a message, with Slack's error |
 | Slack rejects the message edit after a correction | The correction is saved; logged, not retried |
@@ -171,4 +171,4 @@ None outstanding. Closed 2026-09-25: redelivery after a correction (handled in s
 
 **2026-09-28.** Per-service outage rows (one row per partner×service, unique on `(pir_key, partner, affected_service)`) and per-PIR correction state (decided from the PIR's version number, not per row) were decided during planning for this build. Both documents were updated to match.
 
-**2026-09-28.** E1–E4 (non-pilot merchant IDs, the merchant-scan rule, and the L3/L4 severity rule) were decided after inspecting real PIRs (GTO-1549, GTO-1624, GTO-200, GTO-913). Ticket generation is being automated, so the affected-merchants field will hold merchant IDs going forward (E3).
+**2026-09-28.** Non-pilot merchant IDs, the merchant-scan rule, and the L3/L4 severity rule were decided after inspecting real PIRs (GTO-1549, GTO-1624, GTO-200, GTO-913). Ticket generation is being automated, so the affected-merchants field will hold merchant IDs going forward.
