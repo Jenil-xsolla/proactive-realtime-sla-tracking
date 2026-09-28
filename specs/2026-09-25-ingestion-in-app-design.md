@@ -143,7 +143,7 @@ Slack requires a response within three seconds, and the modal must open within t
 - A correction that removes a partner deletes that partner's row.
 - Two corrections against the same version: the second is refused.
 - Every correction writes a before/after record.
-- Redelivery refreshes `system_written` rows and leaves `human_corrected` rows alone.
+- Redelivery of an uncorrected PIR (version = 0) replaces its system-written rows from Jira, deleting rows Jira no longer lists; redelivery of a corrected PIR (version > 0) leaves its rows untouched and posts the Jira-changed note.
 - Receipt-first: a failure after receipt leaves a `failed` row, not nothing.
 - Role gating: the ingestion role returns 404 for dashboard paths, and a missing `SERVICE_ROLE` fails startup.
 - Writer: `decision_type` and `reviewed_by` check constraints, including backfill rows.
