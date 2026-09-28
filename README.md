@@ -12,7 +12,7 @@ contract and our Jira incidents — and warn us **before** a breach happens, not
 
 ## Architecture
 
-![Proactive Real-Time SLA Tracking — component view](docs/sla-architecture-v2.svg)
+![Proactive Real-Time SLA Tracking — component view](docs/sla-architecture-v2.png)
 
 Data flows in one direction, from raw sources to a single evaluated record that every view and alert reads
 from — so the business and engineering pictures can never disagree.
