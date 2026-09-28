@@ -15,6 +15,7 @@ function scoredOutage(): OutageSourceRow {
     affectedService: "Payments",
     outageMinutes: "10",
     severity: "L1 — Critical",
+    source: "pipeline",
     reviewedBy: "ada",
     decisionType: "ai_approved",
     reviewedAt: new Date("2026-04-16T13:00:00.000Z"),

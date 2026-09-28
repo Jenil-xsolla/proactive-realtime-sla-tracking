@@ -64,7 +64,7 @@ function technicalOutage(
     decisionType: source.decisionType,
     reviewedBy: source.reviewedBy,
     reviewedAt: source.reviewedAt === null ? null : source.reviewedAt.toISOString(),
-    source: null,
+    source: source.source,
     service: ref.service,
     incidentStarted: ref.incidentStarted.toISOString(),
     minutesInWindow: ref.minutes,

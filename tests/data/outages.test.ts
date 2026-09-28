@@ -22,6 +22,7 @@ function outage(overrides: Partial<OutageSourceRow> = {}): OutageSourceRow {
     affectedService: "Payments",
     outageMinutes: "10",
     severity: "L1",
+    source: "pipeline",
     reviewedBy: null,
     decisionType: null,
     reviewedAt: null,
@@ -151,6 +152,19 @@ describe("partitionOutages", () => {
 
     expect(result.usable).toEqual([]);
     expect(result.unusable[0]?.reasons).toEqual(["invalid_outage_minutes"]);
+  });
+
+  it("passes source through to usable rows", () => {
+    const result = partitionOutages([outage({ source: "backfill" })]);
+
+    expect(result.usable[0]?.source).toBe("backfill");
+  });
+
+  it("maps an unrecognised source to null without dropping the row", () => {
+    const result = partitionOutages([outage({ source: "csv_import" })]);
+
+    expect(result.usable).toHaveLength(1);
+    expect(result.usable[0]?.source).toBeNull();
   });
 });
 

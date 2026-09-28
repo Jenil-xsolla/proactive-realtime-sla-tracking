@@ -1,4 +1,4 @@
-import type { OutageHealth, OutagePartition, UnusableReason } from "@/data";
+import type { OutageHealth, OutagePartition, OutageProvenance, UnusableReason } from "@/data";
 import type { BaselineComparison, PenaltyFigure, StatusReason } from "@/engine";
 import type { SeverityId } from "@/registry";
 import type { SlaTermsProvider } from "@/terms";
@@ -13,8 +13,8 @@ export type FeedSources = {
   terms?: SlaTermsProvider;
 };
 
-/** Null until sla_outages gains a source column. */
-export type OutageProvenance = "backfill" | "pipeline";
+/** Defined in @/data as sla_outages.source's parsed type; re-exported here for feed consumers. */
+export type { OutageProvenance };
 
 export type TechnicalOutage = {
   pirKey: string;

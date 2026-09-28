@@ -7,6 +7,7 @@ export {
   UNUSABLE_REASONS,
   type OutageHealth,
   type OutagePartition,
+  type OutageProvenance,
   type OutageSourceRow,
   type UnusableOutage,
   type UnusableReason,
