@@ -15,3 +15,5 @@ export {
   buildCaptureRows,
 } from "./resolution";
 export type { ResolvedPartner, CaptureRow } from "./resolution";
+export { verifySlackRequest } from "./notify/verify";
+export type { SlackVerifyResult } from "./notify/verify";
