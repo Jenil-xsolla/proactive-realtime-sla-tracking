@@ -38,7 +38,7 @@ Slice one is independently useful and shippable. The business view follows as so
 
 **What exists already.** The app's engine, feed, technical view and alerting. A test Postgres database. Production is PostgreSQL on GCP (Cloud SQL), requested through the Production Postgres ADR.
 
-**Ingestion is part of the app.** Until 2026-09-28 an n8n workflow wrote `sla_outages`, using a language model for partner attribution and a Slack approval step before writing. n8n cloud is no longer available at Xsolla, so ingestion now lives in `src/ingestion/`: it triggers on PIR approval in Jira, resolves partners by registry lookup with no model, writes immediately, and posts each capture to Slack with a Correct button. Idempotency key is still `(pir_key, partner)`.
+**Ingestion is part of the app.** Until 2026-09-28 an n8n workflow wrote `sla_outages`, using a language model for partner attribution and a Slack approval step before writing. n8n cloud is no longer available at Xsolla, so ingestion now lives in `src/ingestion/`: it triggers on PIR approval in Jira, resolves partners by registry lookup with no model, writes immediately, and posts each capture to Slack with a Correct button. Idempotency key is now `(pir_key, partner, affected_service)`: a PIR affecting several services writes one row per (partner, service).
 
 **What is being added.** Historical incident data from `2026-01-01`, imported from a maintained spreadsheet. No availability data exists before that date.
 
@@ -172,7 +172,7 @@ Created by the app's migrations. The dashboard service reads it; only the ingest
 | Column             | Type        | Notes                                                                                                                                                              |
 | ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `id`               | int         | surrogate key                                                                                                                                                      |
-| `pir_key`          | text        | e.g. `GTO-543`; part of the idempotency key                                                                                                                        |
+| `pir_key`          | text        | e.g. `GTO-543`; part of the idempotency key `(pir_key, partner, affected_service)`                                                                                 |
 | `partner`          | text        | resolved partner display name; a display convenience that can drift                                                                                               |
 | `partner_id`       | **text**    | **already present.** The external *merchant id* (e.g. `"506855"`), not a FK. Authoritative partner identity. String, so parse at the edge |
 | `incident_started` | timestamptz | UTC                                                                                                                                                                |
