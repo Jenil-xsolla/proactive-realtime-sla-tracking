@@ -119,12 +119,48 @@ describe("resolveMerchantText", () => {
     expect(result.unresolved).toEqual([]);
   });
 
-  it("GTO-1624-style text: 44 non-pilot merchant IDs, none of them pilot, no unresolved value", () => {
-    const nonPilotIds = Array.from({ length: 44 }, (_, i) => 900001 + i);
-    const raw = nonPilotIds.join(", ");
+  it("GTO-1624: 44 listed merchant IDs, none pilot, plus the narrative count itself as a digit run", () => {
+    const raw =
+      "44 merchants affected, IDs: 3258, 8286, 10498, 14758, 15182, 20077, 22867, 23338, 29439, 29636, " +
+      "32211, 56531, 64088, 71536, 89052, 96311, 129010, 135804, 135997, 153155, 168523, 191026, 197671, " +
+      "221504, 241104, 243393, 270427, 279739, 280895, 281957, 284100, 314970, 321349, 368789, 390094, " +
+      "393188, 413253, 436759, 437871, 496931, 501537, 639502, 755493, 871374";
     const result = resolveMerchantText(raw);
     expect(result.partners).toEqual([]);
-    expect(result.nonPilotIdCount).toBe(44);
+    // The leading "44" (from "44 merchants affected") is itself a standalone digit run under
+    // the E2 scan, so it's a 45th non-pilot candidate alongside the 44 listed IDs.
+    expect(result.nonPilotIdCount).toBe(45);
+    expect(result.unresolved).toEqual([]);
+  });
+
+  it("GTO-2207: a merchant ID repeated in link text and its URL dedupes to one non-pilot ID", () => {
+    const raw = "[205367](https://internal-admin.srv.local/admins1/agents/update?id=205367) NCSoft HQ";
+    const result = resolveMerchantText(raw);
+    expect(result.partners).toEqual([]);
+    expect(result.nonPilotIdCount).toBe(1);
+    expect(result.unresolved).toEqual([]);
+  });
+
+  it("GTO-1549 excerpt: nine pilot merchant IDs among a dozen tokens, in registry order", () => {
+    const raw = "10252, 105251, 13132, 151639, 169548, 207429, 221437, 237137, 38519, 503608, 506855, 91601";
+    const result = resolveMerchantText(raw);
+    // Hand-computed against src/registry/partners.ts's merchantIds, not derived from the
+    // implementation: 13132->twitch, 151639->scopely, 169548->warner-brothers,
+    // 207429->netmarble, 221437->niantic, 237137->kabam, 38519->roblox, 503608->bandai-namco,
+    // 506855->second-dinner. 10252, 105251 and 91601 match no registry merchantId (non-pilot).
+    // mihoyo (166973) and nexters (60556) are absent from this text.
+    expect(result.partners).toEqual([
+      { id: "scopely", displayName: "Scopely", merchantId: "151639" },
+      { id: "niantic", displayName: "Niantic", merchantId: "221437" },
+      { id: "kabam", displayName: "Kabam", merchantId: "237137" },
+      { id: "warner-brothers", displayName: "Warner Brothers", merchantId: "169548" },
+      { id: "bandai-namco", displayName: "Bandai Namco", merchantId: "503608" },
+      { id: "second-dinner", displayName: "Second Dinner", merchantId: "506855" },
+      { id: "roblox", displayName: "Roblox", merchantId: "38519" },
+      { id: "twitch", displayName: "Twitch", merchantId: "13132" },
+      { id: "netmarble", displayName: "Netmarble", merchantId: "207429" },
+    ]);
+    expect(result.nonPilotIdCount).toBe(3);
     expect(result.unresolved).toEqual([]);
   });
 });
