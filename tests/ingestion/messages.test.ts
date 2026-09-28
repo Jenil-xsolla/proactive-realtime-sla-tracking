@@ -241,6 +241,100 @@ describe("captureMessage", () => {
     expect(unresolvedText).not.toContain("<script>");
     expect(unresolvedText).toContain("&lt;script&gt;&amp;alert");
   });
+
+  it("truncates a very long unresolved raw to 500 chars with an ellipsis, keeping every section under Slack's 3000-char limit", () => {
+    const longRaw = "x".repeat(5000);
+    const result = captureMessage({
+      pirKey: PIR_KEY,
+      pirUrl: PIR_URL,
+      rows: [],
+      unresolved: [{ kind: "merchant", raw: longRaw }],
+      nonPilotIdCount: 0,
+    });
+    for (const b of result.blocks) {
+      if (b.type === "section") {
+        expect(b.text.text.length).toBeLessThanOrEqual(3000);
+      }
+    }
+    const texts = sectionTexts(result.blocks);
+    const unresolvedText = texts.find((t) => t.includes("Unresolved"))!;
+    expect(unresolvedText).toContain("…");
+    expect(unresolvedText).toContain("x".repeat(500));
+    expect(unresolvedText).not.toContain("x".repeat(501));
+  });
+
+  it("splits many rows across sections, each under Slack's 3000-char limit, preserving row order", () => {
+    const rows: CaptureRow[] = [];
+    for (let p = 1; p <= 11; p += 1) {
+      for (let s = 1; s <= 4; s += 1) {
+        rows.push(
+          row({
+            partner: `Partner${String(p).padStart(2, "0")}`,
+            partnerId: String(100000 + p),
+            affectedService: `Service${s}`,
+          }),
+        );
+      }
+    }
+    expect(rows.length).toBe(44);
+
+    const result = captureMessage({
+      pirKey: PIR_KEY,
+      pirUrl: PIR_URL,
+      rows,
+      unresolved: [],
+      nonPilotIdCount: 0,
+    });
+
+    for (const b of result.blocks) {
+      if (b.type === "section") {
+        expect(b.text.text.length).toBeLessThanOrEqual(3000);
+      }
+    }
+
+    const texts = sectionTexts(result.blocks);
+    const rowTexts = texts.filter((t) => !t.includes("captured. It will appear"));
+    expect(rowTexts.length).toBeGreaterThan(1);
+    const combined = rowTexts.join("\n");
+
+    // All 44 rows appear, and in the same order they were given.
+    let cursor = -1;
+    for (const r of rows) {
+      const marker = `*${r.partner}*`;
+      const index = combined.indexOf(marker, cursor + 1);
+      expect(index).toBeGreaterThan(cursor);
+      cursor = index;
+    }
+  });
+});
+
+describe("link guard", () => {
+  it("falls back to the escaped label when the URL contains mrkdwn control characters", () => {
+    const result = failureNotice({
+      pirKey: 'GTO-<1>',
+      pirUrl: "https://example.com/<bad>",
+      error: "boom",
+    });
+    const allText = JSON.stringify(result.blocks);
+    expect(allText).not.toContain("https://example.com/<bad>|");
+    expect(allText).toContain("GTO-&lt;1&gt;");
+  });
+
+  it("falls back to the escaped label when the URL contains whitespace or a pipe", () => {
+    const result = failureNotice({
+      pirKey: PIR_KEY,
+      pirUrl: "https://example.com/has space",
+      error: "boom",
+    });
+    const allText = JSON.stringify(result.blocks);
+    expect(allText).not.toContain("https://example.com/has space|");
+  });
+
+  it("still links a well-formed URL", () => {
+    const result = failureNotice({ pirKey: PIR_KEY, pirUrl: PIR_URL, error: "boom" });
+    const allText = JSON.stringify(result.blocks);
+    expect(allText).toContain(`<${PIR_URL}|${PIR_KEY}>`);
+  });
 });
 
 describe("failureNotice", () => {
