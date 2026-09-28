@@ -1,7 +1,7 @@
 import { PARTNERS, type PartnerId } from "./partners";
 import { SERVICES, type ServiceId } from "./services";
 import { SEVERITIES, type SeverityId } from "./severities";
-import type { CanonicalEntry, ResolveResult } from "./types";
+import type { CanonicalEntry, ResolveResult, ServiceEntry } from "./types";
 
 /** Case-folded, with punctuation removed and whitespace collapsed. */
 export function normalizeName(raw: string): string {
@@ -51,9 +51,33 @@ function buildMerchantLookup(
   return lookup;
 }
 
+/**
+ * Exported for tests only: SERVICES has no duplicate ARIs, so the duplicate
+ * branch is exercised with a crafted list instead.
+ */
+export function buildServiceAriLookup(
+  entries: readonly Pick<ServiceEntry, "id" | "aris">[],
+): Map<string, ServiceId> {
+  const lookup = new Map<string, ServiceId>();
+
+  for (const entry of entries) {
+    for (const ari of entry.aris) {
+      const key = ari.trim().toLowerCase();
+      const existing = lookup.get(key);
+      if (existing !== undefined && existing !== entry.id) {
+        throw new Error(`Service ARI "${ari}" matches both ${existing} and ${entry.id}`);
+      }
+      lookup.set(key, entry.id as ServiceId);
+    }
+  }
+
+  return lookup;
+}
+
 const partnersByName = buildLookup(PARTNERS);
 const partnersByMerchantId = buildMerchantLookup(PARTNERS);
 const servicesByName = buildLookup(SERVICES);
+const servicesByAri = buildServiceAriLookup(SERVICES);
 const severitiesByName = buildLookup(SEVERITIES);
 
 function resolve<Id extends string>(raw: string, lookup: Map<string, Id>): ResolveResult<Id> {
@@ -93,4 +117,21 @@ export function resolveService(raw: string): ResolveResult<ServiceId> {
 
 export function resolveSeverity(raw: string): ResolveResult<SeverityId> {
   return resolve(raw, severitiesByName);
+}
+
+/**
+ * Accepts a bare UUID or a full ARI (`ari:cloud:.../<uuid>`). Only the
+ * segment after the last `/` is looked up, trimmed and lowercased. An empty
+ * input, or a UUID absent from the registry, is unresolved.
+ */
+export function resolveServiceAri(raw: string): ResolveResult<ServiceId> {
+  const segment = raw.slice(raw.lastIndexOf("/") + 1).trim().toLowerCase();
+  if (segment.length === 0) {
+    return { status: "unresolved", raw };
+  }
+  const id = servicesByAri.get(segment);
+  if (id === undefined) {
+    return { status: "unresolved", raw };
+  }
+  return { status: "resolved", id };
 }
