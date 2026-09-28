@@ -10,12 +10,12 @@
 | Where ingestion lives | In the app repo, as its own module | `neuronet-automations` is a cron-job repo; it cannot receive Jira webhooks or Slack clicks |
 | Deployment | One image, two Cloud Run services | Cloud Run ingress is per service, not per path. The dashboard has no auth and must not be public |
 | How PIRs arrive | Jira Automation webhook only | Chosen over polling. Mitigated by recording receipt before any other work |
-| Human review | None before the write. Every capture is posted to Slack with a Correct button that works at any time | Attribution is now a deterministic lookup, so holding rows for approval no longer buys safety. Removes the wait-for-response problem |
+| Human review | None before the write. Every capture is posted to Slack with a Correct button that works at any time | Attribution is a deterministic lookup, so holding rows for approval does not buy safety. Removes the wait-for-response problem |
 | Capture notices | Engineering channel `C0BUT8U637Y` | Every capture and every correction is posted there |
 | Partner attribution | Deterministic scan of the merchants field — registry names and aliases matched at word boundaries, digit runs matched against merchant IDs — no model | The field is free text, not one clean token per value, so attribution scans it rather than matching exact tokens |
-| Merchant spreadsheets | Dropped | The new field format replaces them |
+| Merchant spreadsheets | Not used | Partner attribution reads the merchants field on the PIR; no separate spreadsheet is maintained |
 | `ai_reasoning` column | Dropped | No model output to store |
-| `decision_type` values | `system_written` (written by ingestion, not yet corrected), `human_corrected` (changed through the correction form) | Replaces `ai_approved` |
+| `decision_type` values | `system_written` (written by ingestion, not yet corrected), `human_corrected` (changed through the correction form) | Distinguishes rows written by ingestion from rows a person has corrected |
 | Correction history | Every correction recorded in `sla_outage_corrections` | The first correction would otherwise overwrite what the system wrote, leaving no trail in a dispute |
 | Scheduled alert trigger | Cloud Scheduler, 01:00 and 13:00 UTC | Native to Cloud Run |
 | Schema ownership | The repo owns `sla_outages`, `sla_pir_reviews`, `sla_outage_corrections` and `sla_alert_state` | The GCP database is new; nothing to migrate from the test database |

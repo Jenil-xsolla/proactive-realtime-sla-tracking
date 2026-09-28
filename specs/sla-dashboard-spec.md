@@ -116,7 +116,7 @@ Two things trigger an alert run, and neither holds SLA logic: Cloud Scheduler at
 
 The affected-merchants field holds partner names or merchant IDs, so attribution is a registry lookup, merchant ID first. No model is involved and nothing is guessed: an unmatched non-numeric value is flagged and produces no row, and a non-pilot merchant ID is ignored and counted.
 
-Rows are written immediately as `system_written` and posted to Slack channel `C0BUT8U637Y`. A Correct button stays usable indefinitely. A correction replaces the PIR's rows as a set, marks them `human_corrected` with the reviewer's name, and is recorded with before and after values. This replaced the earlier approve-before-write step, which only made sense while a model was proposing attributions.
+Rows are written immediately as `system_written` and posted to Slack channel `C0BUT8U637Y`. A Correct button stays usable indefinitely. A correction replaces the PIR's rows as a set, marks them `human_corrected` with the reviewer's name, and is recorded with before and after values. There is no review step before the write: attribution is a deterministic lookup, so nothing needs approving first.
 
 Full design: the companion document.
 
@@ -187,7 +187,7 @@ Created by the app's migrations. The dashboard service reads it; only the ingest
 | `source`           | text        | `pipeline` or `backfill` |
 
 
-**`ai_reasoning` was dropped on 2026-09-28** along with the language model that produced it. Nothing in the app referred to it.
+**`sla_outages` has no `ai_reasoning` column.** Attribution is a registry lookup and produces no free-text reasoning. Nothing in the app refers to it.
 
 **Not to be confused with the engine's** `StatusReason`**.** That is computed by the engine, explains why a scope holds its status, and is unrelated to the `reason` column.
 
@@ -613,7 +613,7 @@ The UI shows processing state during extraction.
 
 A model extraction is a draft, never an authority. A target misread as 99.9% instead of 99.95% doubles the monthly allowance and every downstream figure with it, in the direction favouring Xsolla, and surfaces in a partner dispute.
 
-Incident attribution no longer needs a gate before writing, because it is a deterministic lookup. Contract extraction does, because a model reads free text and can be confidently wrong.
+Incident attribution needs no gate before writing: it is a deterministic lookup. Contract extraction does, because a model reads free text and can be confidently wrong.
 
 Unconfirmed terms are not returned by `listScopes`, so nothing half-verified can reach a status badge.
 
@@ -666,7 +666,7 @@ No UI snapshot tests.
 | 4   | Cloud SQL connection method from Cloud Run (Direct VPC egress or the Cloud SQL connector), and how `sla-dashboard` sits behind corporate SSO | Deployment | Engineering / Infrastructure |
 
 
-**Closed 2026-09-28.** The `source` column is part of the new schema, so it no longer depends on another team.
+**Closed 2026-09-28.** The `source` column is part of the schema this repo owns; no other team is involved.
 
 **Closed 2026-09-21.** `outage_minutes` is wall-clock elapsed time, always positive, and together with `incident_started` is the sole basis for the timeline. Interval merging is valid as specified.
 
