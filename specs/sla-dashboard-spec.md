@@ -114,7 +114,7 @@ Two things trigger an alert run, and neither holds SLA logic: Cloud Scheduler at
 
 ### AD-8 — Ingestion is in the app, write first, correct any time
 
-The affected-merchants field holds partner names or merchant IDs, so attribution is a registry lookup, merchant ID first. No model is involved and nothing is guessed: an unmatched value is flagged and produces no row.
+The affected-merchants field holds partner names or merchant IDs, so attribution is a registry lookup, merchant ID first. No model is involved and nothing is guessed: an unmatched non-numeric value is flagged and produces no row, and a non-pilot merchant ID is ignored and counted.
 
 Rows are written immediately as `system_written` and posted to Slack channel `C0BUT8U637Y`. A Correct button stays usable indefinitely. A correction replaces the PIR's rows as a set, marks them `human_corrected` with the reviewer's name, and is recorded with before and after values. This replaced the earlier approve-before-write step, which only made sense while a model was proposing attributions.
 
