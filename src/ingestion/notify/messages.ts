@@ -129,6 +129,23 @@ export function correctedAfterJiraChangeNote(input: CorrectedAfterJiraChangeNote
   return { text, blocks };
 }
 
+export type JiraDowngradedReason = "no_outage" | "below_l2";
+
+export type JiraDowngradedNoteInput = { pirKey: string; pirUrl: string; reason: JiraDowngradedReason };
+
+/**
+ * Note that an already-captured PIR's latest Jira read now shows no outage
+ * or a severity below L2 (spec §2 "Redelivery"): its rows and status are
+ * left unchanged, and the channel gets a note so a person decides — a
+ * correction that clears every partner is how they'd remove it. No button.
+ */
+export function jiraDowngradedNote(input: JiraDowngradedNoteInput): SlackMessage {
+  const reasonText = input.reason === "no_outage" ? "no outage" : "severity below L2";
+  const text = `${input.pirKey}: Jira now shows ${reasonText}. Rows were left unchanged; use Correct to remove the partners if this PIR should not count.`;
+  const blocks: SlackBlock[] = [section(`${text}\n${link(input.pirUrl, input.pirKey)}`)];
+  return { text, blocks };
+}
+
 function section(text: string): SectionBlock {
   return { type: "section", text: { type: "mrkdwn", text } };
 }

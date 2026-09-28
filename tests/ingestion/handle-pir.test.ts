@@ -240,9 +240,15 @@ describe("handlePirApproved", () => {
     const outcome = await handlePirApproved("GTO-200", deps);
 
     expect(outcome.kind).toBe("failed");
+    if (outcome.kind === "failed") {
+      expect(outcome.error.toLowerCase()).toContain("capturerows");
+    }
     expect(postCalls).toHaveLength(1);
     expect(postCalls[0]?.text).toContain("GTO-200 failed to capture");
     expect(postCalls.every((call) => !call.text.includes("captured. It will appear"))).toBe(true);
+
+    const rows = await readOutages(testDb, "GTO-200");
+    expect(rows).toHaveLength(0);
   });
 
   it("Slack ok:false on the capture message -> rows written, slack_error saved, messagePosted false", async () => {
@@ -274,6 +280,21 @@ describe("handlePirApproved", () => {
     expect(shared.updateCalls).toHaveLength(1);
     expect(shared.updateCalls[0]?.ts).toBe("1000.1");
     expect(shared.updateCalls[0]?.channel).toBe(SLACK_CHANNEL);
+  });
+
+  it("redelivery of an uncorrected PIR: updateMessage ok:false -> slack_error saved, messagePosted false", async () => {
+    testDb = await createTestDatabase();
+    const shared = buildDeps(testDb);
+    await handlePirApproved("GTO-200", shared.deps);
+    expect(shared.postCalls).toHaveLength(1);
+
+    const { updateMessage } = fakeUpdateMessage({ ok: false, error: "edit_window_closed" });
+    const outcome = await handlePirApproved("GTO-200", { ...shared.deps, updateMessage });
+
+    expect(outcome).toEqual<PirOutcome>({ kind: "captured", rowCount: 7, messagePosted: false });
+
+    const review = await readReview(testDb, "GTO-200");
+    expect(review?.slackError).toBe("edit_window_closed");
   });
 
   it("redelivery of a corrected PIR posts the Jira-changed note, leaves rows unchanged, and does not trigger alerts", async () => {
@@ -333,8 +354,102 @@ describe("handlePirApproved", () => {
     expect(outcome.kind).toBe("receipt_failed");
     if (outcome.kind !== "receipt_failed") return;
     expect(typeof outcome.error).toBe("string");
-    // Best effort: the notice post may itself succeed or fail against the
-    // fake, but handlePirApproved must not throw either way.
-    expect(postCalls.length).toBeLessThanOrEqual(1);
+    // The notice post goes through the fake postMessage, which is
+    // independent of the closed database, so it always succeeds.
+    expect(postCalls).toHaveLength(1);
+  });
+
+  it("Jira key mismatch (a moved issue) -> failed with a clear error, using issueKey throughout", async () => {
+    testDb = await createTestDatabase();
+    const movedFixture = { ...gto200, key: "GTO-9999" };
+    const fetchIssue: PirFetchIssue = async (input) => {
+      if (input.key === "GTO-200") {
+        return { ok: true, json: movedFixture };
+      }
+      const fixture = FIXTURES[input.key];
+      return fixture === undefined ? { ok: false, error: "missing" } : { ok: true, json: fixture };
+    };
+    const { deps, postCalls } = buildDeps(testDb, { fetchIssue });
+
+    const outcome = await handlePirApproved("GTO-200", deps);
+
+    expect(outcome).toEqual<PirOutcome>({ kind: "failed", error: "Jira returned key GTO-9999 for GTO-200" });
+    expect(postCalls).toHaveLength(1);
+    expect(postCalls[0]?.text).toContain("GTO-200 failed to capture");
+
+    const review = await readReview(testDb, "GTO-200");
+    expect(review?.status).toBe("failed");
+    expect(review?.error).toBe("Jira returned key GTO-9999 for GTO-200");
+  });
+
+  it("A1: a corrected PIR that fails then retries ends status captured, not stuck", async () => {
+    testDb = await createTestDatabase();
+    const shared = buildDeps(testDb);
+    await handlePirApproved("GTO-200", shared.deps);
+    await testDb.db.update(slaPirReviews).set({ version: 1 }).where(eq(slaPirReviews.pirKey, "GTO-200"));
+
+    // Redelivery: Jira is briefly unreachable -> failed, even though corrected.
+    const { fetchIssue: failingFetch } = fakeFetchIssue({ "GTO-200": { ok: false, error: "Jira is down" } });
+    const failedOutcome = await handlePirApproved("GTO-200", { ...shared.deps, fetchIssue: failingFetch });
+    expect(failedOutcome.kind).toBe("failed");
+    expect((await readReview(testDb, "GTO-200"))?.status).toBe("failed");
+
+    // Retrigger: Jira is reachable again; captureRows finds version > 0 and
+    // reports corrected_untouched. Status must end up captured, not stuck
+    // on received (what recordReceipt's retry path sets) or failed.
+    const retryOutcome = await handlePirApproved("GTO-200", shared.deps);
+
+    expect(retryOutcome).toEqual<PirOutcome>({ kind: "corrected_untouched" });
+    const review = await readReview(testDb, "GTO-200");
+    expect(review?.status).toBe("captured");
+    expect(review?.error).toBeNull();
+  });
+
+  it("A2: GTO-200 captured, then redelivered with minutes 0 -> rows unchanged, status captured, downgrade note posted, no trigger", async () => {
+    testDb = await createTestDatabase();
+    const shared = buildDeps(testDb);
+    await handlePirApproved("GTO-200", shared.deps);
+    expect(shared.triggerCalls()).toBe(1);
+    const beforeRows = await readOutages(testDb, "GTO-200");
+    expect(beforeRows).toHaveLength(7);
+
+    const downgraded = { ...gto200, fields: { ...gto200.fields, customfield_31331: 0 } };
+    const fetchIssue: PirFetchIssue = async (input) => {
+      if (input.key === "GTO-200") {
+        return { ok: true, json: downgraded };
+      }
+      const fixture = FIXTURES[input.key];
+      return fixture === undefined ? { ok: false, error: "missing" } : { ok: true, json: fixture };
+    };
+
+    const outcome = await handlePirApproved("GTO-200", { ...shared.deps, fetchIssue });
+
+    expect(outcome).toEqual<PirOutcome>({ kind: "downgraded_untouched", reason: "no_outage" });
+    expect(shared.triggerCalls()).toBe(1); // unchanged
+    expect(shared.postCalls).toHaveLength(2);
+    expect(shared.postCalls[1]?.text).toContain("Jira now shows no outage");
+
+    const afterRows = await readOutages(testDb, "GTO-200");
+    expect(afterRows).toEqual(beforeRows);
+
+    const review = await readReview(testDb, "GTO-200");
+    expect(review?.status).toBe("captured");
+  });
+
+  it("retry variant: a never-captured PIR fails, then retries into a skip -> marked skipped as usual", async () => {
+    testDb = await createTestDatabase();
+    const { fetchIssue: failingFetch } = fakeFetchIssue({ "GTO-2454": { ok: false, error: "Jira is down" } });
+    const first = buildDeps(testDb, { fetchIssue: failingFetch });
+    const firstOutcome = await handlePirApproved("GTO-2454", first.deps);
+    expect(firstOutcome.kind).toBe("failed");
+
+    const second = buildDeps(testDb);
+    const secondOutcome = await handlePirApproved("GTO-2454", second.deps);
+
+    expect(secondOutcome).toEqual<PirOutcome>({ kind: "skipped", reason: "no_outage" });
+    expect(second.postCalls).toHaveLength(0);
+    const review = await readReview(testDb, "GTO-2454");
+    expect(review?.status).toBe("skipped");
+    expect(review?.incidentStarted).toBeNull();
   });
 });

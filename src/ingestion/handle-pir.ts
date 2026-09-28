@@ -1,18 +1,25 @@
 import type { Database } from "@/data";
 import { getIngestionDatabase } from "@/ingestion/db";
 import { INCIDENT_FIELDS, PIR_FIELDS, fetchIssue, type JiraFetchResult } from "@/ingestion/jira/client";
-import { readIncidentStart, readPir } from "@/ingestion/jira/extract";
+import { readIncidentStart, readPir, type PirRead } from "@/ingestion/jira/extract";
 import { buildCaptureRows, resolveMerchantText, resolveServiceAris, type CaptureRow } from "@/ingestion/resolution";
-import { captureMessage, correctedAfterJiraChangeNote, failureNotice } from "@/ingestion/notify/messages";
+import {
+  captureMessage,
+  correctedAfterJiraChangeNote,
+  failureNotice,
+  jiraDowngradedNote,
+} from "@/ingestion/notify/messages";
 import { triggerAlertRun } from "@/ingestion/notify/trigger-alerts";
 import {
   captureRows,
   getSlackRef,
+  markCaptured,
   markFailed,
   markSkipped,
   recordReceipt,
   saveSlackError,
   saveSlackMessage,
+  wasCaptured,
   type ExtractedValues,
 } from "@/ingestion/writer";
 import { postMessage, updateMessage, type PostMessageResult, type UpdateMessageResult } from "@/slack/client";
@@ -21,7 +28,9 @@ import { postMessage, updateMessage, type PostMessageResult, type UpdateMessageR
  * Orchestrates one Jira PIR end to end (spec §2 "Ingestion flow"): receipt,
  * Jira fetch, extraction, resolution, write, Slack, alert trigger. Every
  * building block is injected so this function has no I/O of its own beyond
- * calling `deps`. Never throws — every terminal state is a `PirOutcome`.
+ * calling `deps`. Never throws — every terminal state is a `PirOutcome`, and
+ * a top-level catch routes any unexpected throw (from a misbehaving `deps`
+ * function, not just an expected failure path) to the same `failed` outcome.
  */
 
 /** The subset of fetchIssue's real signature this flow calls. */
@@ -56,6 +65,7 @@ export type PirDeps = {
 export type PirOutcome =
   | { kind: "captured"; rowCount: number; messagePosted: boolean }
   | { kind: "skipped"; reason: string }
+  | { kind: "downgraded_untouched"; reason: string }
   | { kind: "failed"; error: string }
   | { kind: "corrected_untouched" }
   | { kind: "receipt_failed"; error: string };
@@ -82,98 +92,167 @@ export async function handlePirApproved(issueKey: string, deps: PirDeps): Promis
     return { kind: "receipt_failed", error: message };
   }
 
-  const pirFetch = await deps.fetchIssue({ key: issueKey, fields: PIR_FIELDS });
-  if (!pirFetch.ok) {
-    return fail(deps, issueKey, undefined, pirFetch.error, now, log);
-  }
-
-  const read = readPir(pirFetch.json, deps.config.jiraBaseUrl);
-  if (read.kind === "skip") {
-    try {
-      await markSkipped(deps.db, issueKey, read.reason, now);
-    } catch (error) {
-      log(`markSkipped failed for ${issueKey}: ${describeError(error)}`);
+  // Everything from here on is wrapped in one catch: "never throws" must not
+  // depend on every dependency behaving (an unexpected throw from `deps`,
+  // not just an `ok: false`/`invalid` result, still resolves to `failed`).
+  let knownPirUrl: string | undefined;
+  try {
+    const pirFetch = await deps.fetchIssue({ key: issueKey, fields: PIR_FIELDS });
+    if (!pirFetch.ok) {
+      return await fail(deps, issueKey, undefined, pirFetch.error, now, log);
     }
-    return { kind: "skipped", reason: read.reason };
-  }
-  if (read.kind === "invalid") {
-    return fail(deps, issueKey, undefined, read.problems.join("; "), now, log);
-  }
 
-  const pir = read.value;
+    const read: PirRead = readPir(pirFetch.json, deps.config.jiraBaseUrl);
+    if (read.kind === "skip") {
+      return await handleSkip(deps, issueKey, read.reason, now, log);
+    }
+    if (read.kind === "invalid") {
+      return await fail(deps, issueKey, undefined, read.problems.join("; "), now, log);
+    }
 
-  const incidentFetch = await deps.fetchIssue({ key: pir.incidentKey, fields: INCIDENT_FIELDS });
-  if (!incidentFetch.ok) {
-    return fail(deps, issueKey, pir.pirUrl, incidentFetch.error, now, log);
-  }
-  const incidentStarted = readIncidentStart(incidentFetch.json);
-  if (incidentStarted === null) {
-    return fail(deps, issueKey, pir.pirUrl, `incident start time missing on ${pir.incidentKey}`, now, log);
-  }
+    const pir = read.value;
+    knownPirUrl = pir.pirUrl;
 
-  const merchantResolution = resolveMerchantText(pir.merchantText);
-  const serviceResolution = resolveServiceAris(pir.serviceAris);
-  const unresolved = [...merchantResolution.unresolved, ...serviceResolution.unresolved];
-  const rows: CaptureRow[] = buildCaptureRows(
-    {
-      pirKey: pir.pirKey,
-      pirUrl: pir.pirUrl,
-      severity: pir.severity,
-      outageMinutes: pir.outageMinutes,
+    // Every DB and Slack key is `issueKey`, the key Jira Automation called us
+    // with and `recordReceipt` recorded under. A PIR that Jira's own read now
+    // reports under a different key (a moved issue) is a data mismatch, not
+    // something to silently key rows under a different value for.
+    if (pir.pirKey !== issueKey) {
+      return await fail(deps, issueKey, pir.pirUrl, `Jira returned key ${pir.pirKey} for ${issueKey}`, now, log);
+    }
+
+    const incidentFetch = await deps.fetchIssue({ key: pir.incidentKey, fields: INCIDENT_FIELDS });
+    if (!incidentFetch.ok) {
+      return await fail(deps, issueKey, pir.pirUrl, incidentFetch.error, now, log);
+    }
+    const incidentStarted = readIncidentStart(incidentFetch.json);
+    if (incidentStarted === null) {
+      return await fail(deps, issueKey, pir.pirUrl, `incident start time missing on ${pir.incidentKey}`, now, log);
+    }
+
+    const merchantResolution = resolveMerchantText(pir.merchantText);
+    const serviceResolution = resolveServiceAris(pir.serviceAris);
+    const unresolved = [...merchantResolution.unresolved, ...serviceResolution.unresolved];
+    const rows: CaptureRow[] = buildCaptureRows(
+      {
+        pirKey: issueKey,
+        pirUrl: pir.pirUrl,
+        severity: pir.severity,
+        outageMinutes: pir.outageMinutes,
+        incidentStarted,
+      },
+      merchantResolution.partners,
+      serviceResolution.services,
+    );
+
+    const extracted: ExtractedValues = {
       incidentStarted,
-    },
-    merchantResolution.partners,
-    serviceResolution.services,
-  );
+      outageMinutes: pir.outageMinutes,
+      affectedServices: serviceResolution.services.map((service) => service.displayName),
+      severity: pir.severity,
+      pirUrl: pir.pirUrl,
+    };
 
-  const extracted: ExtractedValues = {
-    incidentStarted,
-    outageMinutes: pir.outageMinutes,
-    affectedServices: serviceResolution.services.map((service) => service.displayName),
-    severity: pir.severity,
-    pirUrl: pir.pirUrl,
-  };
-
-  let captureResult;
-  try {
-    captureResult = await captureRows(deps.db, { pirKey: pir.pirKey, extracted, rows, unresolved }, now);
-  } catch (error) {
-    return fail(deps, issueKey, pir.pirUrl, describeError(error), now, log);
-  }
-
-  if (captureResult.kind === "corrected_untouched") {
-    const note = correctedAfterJiraChangeNote({ pirKey: pir.pirKey, pirUrl: pir.pirUrl });
-    await postMessageBestEffort(deps, note, log);
-    return { kind: "corrected_untouched" };
-  }
-
-  const message = captureMessage({
-    pirKey: pir.pirKey,
-    pirUrl: pir.pirUrl,
-    rows,
-    unresolved,
-    nonPilotIdCount: merchantResolution.nonPilotIdCount,
-  });
-
-  const messagePosted = await deliverCaptureMessage(deps, pir.pirKey, message, now, log);
-
-  try {
-    const triggerResult = await deps.triggerAlerts();
-    if (!triggerResult.ok) {
-      log(`triggerAlerts failed for ${issueKey}: ${triggerResult.error ?? "unknown error"}`);
+    let captureResult;
+    try {
+      captureResult = await captureRows(deps.db, { pirKey: issueKey, extracted, rows, unresolved }, now);
+    } catch (error) {
+      return await fail(deps, issueKey, pir.pirUrl, describeError(error), now, log);
     }
+
+    if (captureResult.kind === "corrected_untouched") {
+      // A retry may have moved this PIR's status to `received` before
+      // captureRows found it already corrected (version > 0) and left its
+      // rows untouched; restore `captured` so the review doesn't get stuck.
+      try {
+        await markCaptured(deps.db, issueKey, now);
+      } catch (error) {
+        log(`markCaptured failed for ${issueKey}: ${describeError(error)}`);
+      }
+      const note = correctedAfterJiraChangeNote({ pirKey: issueKey, pirUrl: pir.pirUrl });
+      await postMessageBestEffort(deps, note, log);
+      return { kind: "corrected_untouched" };
+    }
+
+    const message = captureMessage({
+      pirKey: issueKey,
+      pirUrl: pir.pirUrl,
+      rows,
+      unresolved,
+      nonPilotIdCount: merchantResolution.nonPilotIdCount,
+    });
+
+    const messagePosted = await deliverCaptureMessage(deps, issueKey, message, now, log);
+
+    try {
+      const triggerResult = await deps.triggerAlerts();
+      if (!triggerResult.ok) {
+        log(`triggerAlerts failed for ${issueKey}: ${triggerResult.error ?? "unknown error"}`);
+      }
+    } catch (error) {
+      log(`triggerAlerts threw for ${issueKey}: ${describeError(error)}`);
+    }
+
+    return { kind: "captured", rowCount: captureResult.rowCount, messagePosted };
   } catch (error) {
-    log(`triggerAlerts threw for ${issueKey}: ${describeError(error)}`);
+    return fail(deps, issueKey, knownPirUrl, describeError(error), now, log);
+  }
+}
+
+/**
+ * Handles a PIR that Jira's current read says should be skipped (no outage,
+ * or severity below L2). A PIR that has never been captured is marked
+ * `skipped` as before. A PIR that has already been captured (spec §2
+ * "Redelivery") keeps its rows and its `captured` status untouched — Jira's
+ * skip verdict on a redelivery does not retroactively undo a capture — and
+ * the channel gets a note instead, so a person decides whether to correct it.
+ */
+async function handleSkip(
+  deps: PirDeps,
+  issueKey: string,
+  reason: "no_outage" | "below_l2",
+  now: Date,
+  log: (msg: string) => void,
+): Promise<PirOutcome> {
+  let alreadyCaptured = false;
+  try {
+    alreadyCaptured = await wasCaptured(deps.db, issueKey);
+  } catch (error) {
+    log(`wasCaptured failed for ${issueKey}: ${describeError(error)}`);
   }
 
-  return { kind: "captured", rowCount: captureResult.rowCount, messagePosted };
+  if (alreadyCaptured) {
+    // A retry may have moved status to `received` before this read found
+    // the PIR downgraded; restore `captured` so the review doesn't get stuck.
+    try {
+      await markCaptured(deps.db, issueKey, now);
+    } catch (error) {
+      log(`markCaptured failed for ${issueKey}: ${describeError(error)}`);
+    }
+    const note = jiraDowngradedNote({
+      pirKey: issueKey,
+      pirUrl: buildPirUrl(deps.config.jiraBaseUrl, issueKey),
+      reason,
+    });
+    await postMessageBestEffort(deps, note, log);
+    return { kind: "downgraded_untouched", reason };
+  }
+
+  try {
+    await markSkipped(deps.db, issueKey, reason, now);
+  } catch (error) {
+    log(`markSkipped failed for ${issueKey}: ${describeError(error)}`);
+  }
+  return { kind: "skipped", reason };
 }
 
 /**
  * Posts or edits the capture message (spec §2 step 6, A9): edits the saved
  * message in place when one already exists for this PIR, otherwise posts a
- * new one and saves its reference. A Slack rejection (or a thrown error) is
- * recorded as `slack_error`; rows stay written either way (spec §4).
+ * new one and saves its reference. A Slack rejection, or a thrown error, is
+ * recorded as `slack_error`; rows stay written either way (spec §4). A
+ * successful post or edit clears any stale `slack_error` left by an earlier
+ * attempt (saveSlackMessage does this).
  */
 async function deliverCaptureMessage(
   deps: PirDeps,
@@ -185,18 +264,24 @@ async function deliverCaptureMessage(
   try {
     const ref = await getSlackRef(deps.db, pirKey);
     if (ref?.slackTs) {
+      const channel = ref.slackChannel ?? deps.config.slackChannel;
       const result = await deps.updateMessage({
         token: deps.config.slackToken,
-        channel: ref.slackChannel ?? deps.config.slackChannel,
+        channel,
         ts: ref.slackTs,
         text: message.text,
         blocks: message.blocks,
       });
-      if (result.ok) {
-        return true;
+      if (!result.ok) {
+        await saveSlackErrorBestEffort(deps, pirKey, result.error, now, log);
+        return false;
       }
-      await saveSlackErrorBestEffort(deps, pirKey, result.error, now, log);
-      return false;
+      try {
+        await saveSlackMessage(deps.db, pirKey, { channel, ts: ref.slackTs }, now);
+      } catch (error) {
+        log(`saveSlackMessage failed for ${pirKey}: ${describeError(error)}`);
+      }
+      return true;
     }
 
     const result = await deps.postMessage({
@@ -216,7 +301,9 @@ async function deliverCaptureMessage(
     }
     return true;
   } catch (error) {
-    log(`posting the capture message failed for ${pirKey}: ${describeError(error)}`);
+    const errorMessage = describeError(error);
+    log(`posting the capture message failed for ${pirKey}: ${errorMessage}`);
+    await saveSlackErrorBestEffort(deps, pirKey, errorMessage, now, log);
     return false;
   }
 }
@@ -258,6 +345,8 @@ async function postMessageBestEffort(
 /**
  * "failed" (spec §2 "On failure at any step"): marks the review failed,
  * then posts the failure notice, best effort at every step. Never throws.
+ * An already-captured PIR that later fails also lands here (its rows stay;
+ * the failure is visible on the health panel).
  */
 async function fail(
   deps: PirDeps,

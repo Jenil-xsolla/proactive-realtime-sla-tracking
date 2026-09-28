@@ -205,6 +205,33 @@ export async function markFailed(db: Database, pirKey: string, error: string, no
   await updateOneRow(db, pirKey, { status: "failed", error, updatedAt: now });
 }
 
+/**
+ * Restores a PIR's review status to `captured` without touching its rows or
+ * its extracted values. For redelivery paths that must leave `sla_outages`
+ * untouched but still need to move the review off `received` or `failed`
+ * (spec §2 "Redelivery"): a corrected PIR (version > 0) redelivered after
+ * `captureRows` reports `corrected_untouched`, and an already-captured PIR
+ * that Jira now reports as skip (no outage, or severity below L2).
+ */
+export async function markCaptured(db: Database, pirKey: string, now: Date): Promise<void> {
+  await updateOneRow(db, pirKey, { status: "captured", error: null, updatedAt: now });
+}
+
+/**
+ * True once a PIR has ever been captured or corrected: `incident_started`
+ * is set only by `captureRows` or a correction, never by `recordReceipt`
+ * alone. Used on redelivery to tell "this PIR was captured, and Jira now
+ * reports it as skip" (rows and status stay put) apart from "this PIR has
+ * never produced rows and Jira reports it as skip" (mark it skipped).
+ */
+export async function wasCaptured(db: Database, pirKey: string): Promise<boolean> {
+  const rows = await db
+    .select({ incidentStarted: slaPirReviews.incidentStarted })
+    .from(slaPirReviews)
+    .where(eq(slaPirReviews.pirKey, pirKey));
+  return rows[0]?.incidentStarted != null;
+}
+
 /** Records the capture message's channel/ts and clears any prior Slack error. */
 export async function saveSlackMessage(
   db: Database,
