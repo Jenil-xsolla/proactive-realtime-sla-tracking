@@ -2,9 +2,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { Pool } from "pg";
 import { slaAlertState } from "./schema/alert-state";
+import { slaOutageCorrections } from "./schema/outage-corrections";
 import { slaOutages } from "./schema/outages";
+import { slaPirReviews } from "./schema/pir-reviews";
 
-export const schema = { slaOutages, slaAlertState };
+export const schema = { slaOutages, slaAlertState, slaPirReviews, slaOutageCorrections };
 
 export function createDatabase(connectionString: string) {
   const pool = new Pool({ connectionString });
