@@ -225,6 +225,22 @@ export async function saveSlackError(db: Database, pirKey: string, error: string
   await updateOneRow(db, pirKey, { slackError: error, updatedAt: now });
 }
 
+/**
+ * Reads the review's saved Slack reference, so a redelivery can edit the
+ * existing capture message in place (A9) instead of posting a new one.
+ * Returns `undefined` when there is no review row at all.
+ */
+export async function getSlackRef(
+  db: Database,
+  pirKey: string,
+): Promise<{ slackChannel: string | null; slackTs: string | null } | undefined> {
+  const rows = await db
+    .select({ slackChannel: slaPirReviews.slackChannel, slackTs: slaPirReviews.slackTs })
+    .from(slaPirReviews)
+    .where(eq(slaPirReviews.pirKey, pirKey));
+  return rows[0];
+}
+
 async function updateOneRow(
   db: Database,
   pirKey: string,

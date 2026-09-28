@@ -19,3 +19,5 @@ export { verifySlackRequest } from "./notify/verify";
 export type { SlackVerifyResult } from "./notify/verify";
 export { triggerAlertRun } from "./notify/trigger-alerts";
 export type { TriggerAlertRunResult } from "./notify/trigger-alerts";
+export { defaultPirDeps, handlePirApproved } from "./handle-pir";
+export type { PirDeps, PirFetchIssue, PirOutcome, PirPostMessage, PirUpdateMessage } from "./handle-pir";
