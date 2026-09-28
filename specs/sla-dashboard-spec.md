@@ -38,7 +38,7 @@ Slice one is independently useful and shippable. The business view follows as so
 
 **What exists already.** The app's engine, feed, technical view and alerting. A test Postgres database. Production is PostgreSQL on GCP (Cloud SQL), requested through the Production Postgres ADR.
 
-**Ingestion is part of the app.** Until 2026-09-28 an n8n workflow wrote `sla_outages`, using a language model for partner attribution and a Slack approval step before writing. n8n cloud is no longer available at Xsolla, so ingestion now lives in `src/ingestion/`: it triggers on PIR approval in Jira, resolves partners by registry lookup with no model, writes immediately, and posts each capture to Slack with a Correct button. Idempotency key is now `(pir_key, partner, affected_service)`: a PIR affecting several services writes one row per (partner, service).
+**Ingestion is part of the app.** Ingestion lives in `src/ingestion/`: it triggers on PIR approval in Jira, resolves partners by registry lookup with no model, writes immediately, and posts each capture to Slack with a Correct button. Idempotency key is `(pir_key, partner, affected_service)`: a PIR affecting several services writes one row per (partner, service).
 
 **What is being added.** Historical incident data from `2026-01-01`, imported from a maintained spreadsheet. No availability data exists before that date.
 
@@ -575,7 +575,7 @@ The lighter "unusually bad month" heads-up from GTOC-46, computed against that p
 
 ### 10.6 Scheduling
 
-Cloud Scheduler calls `/api/internal/alerts/run` at 01:00 and 13:00 UTC. That catches changes driven by time alone, such as a scope crossing an elapsed-time floor with no new outage. The ingestion service also calls it after every capture or correction, so new data is evaluated immediately. Transition-only firing and compare-and-swap make overlapping calls harmless. n8n is no longer used.
+Cloud Scheduler calls `/api/internal/alerts/run` at 01:00 and 13:00 UTC. That catches changes driven by time alone, such as a scope crossing an elapsed-time floor with no new outage. The ingestion service also calls it after every capture or correction, so new data is evaluated immediately. Transition-only firing and compare-and-swap make overlapping calls harmless.
 
 ---
 

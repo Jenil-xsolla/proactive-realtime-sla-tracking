@@ -1,7 +1,6 @@
 # Ingestion inside the app — design
 
 **Status:** approved 2026-09-25, revised the same day to write-first capture with correction at any time
-**Replaces:** the n8n "Real-Time SLA Tracking" workflow (n8n cloud is no longer available at Xsolla)
 **Location:** `specs/2026-09-25-ingestion-in-app-design.md`, beside `specs/sla-dashboard-spec.md`
 
 ## Decisions
@@ -48,7 +47,7 @@ src/ingestion/
 
 The engine and feed are unchanged. An ESLint rule stops anything outside `src/ingestion/` from importing `writer.ts` or the ingestion database client.
 
-`src/registry/services.ts` gains the ARI-to-service map, moved out of the n8n Code node. The registry now drives the service mapping, partner resolution and the correction form's options. Adding a partner or service is a change in one place.
+`src/registry/services.ts` gains the ARI-to-service map, held in the registry. The registry now drives the service mapping, partner resolution and the correction form's options. Adding a partner or service is a change in one place.
 
 ### Schema
 
@@ -129,7 +128,7 @@ Slack requires a response within three seconds, and the modal must open within t
 | Jira fetch fails, or a required field is missing | `failed`, engineering notified |
 | Missing or zero `customfield_31331` (outage minutes) | `skipped` — no outage on this PIR (A3) |
 | Non-numeric `customfield_31331` | `failed` (A3) |
-| Missing incident link (type `11031`), or missing incident field `customfield_10068` | `failed`. n8n fell back to the PIR's `created` time, a different moment that would skew the timeline; this design does not (A4) |
+| Missing incident link (type `11031`), or missing incident field `customfield_10068` | `failed`. The PIR's `created` time is a different moment that would skew the timeline, so this design does not fall back to it (A4) |
 | Missing severity (`customfield_11646.value`) | `failed` (A6) |
 | Severity is L3 or L4 (`"L3 — Limited"`, `"L4 — Minor"`) | `skipped` — only L0–L2 PIRs are captured, with a reason (E4) |
 | Severity label is neither L0–L4 | `failed` — unrecognised severity (E4) |
