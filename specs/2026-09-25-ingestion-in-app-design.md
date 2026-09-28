@@ -140,7 +140,8 @@ Slack requires a response within three seconds, and the modal must open within t
 
 ### Tests
 
-- Resolution: merchant ID, name, alias, and unresolved values.
+- Resolution: digit runs matched as merchant IDs, names and aliases matched at word boundaries, a non-pilot merchant ID ignored and counted, text with no partner and no digit run recorded as one unresolved value, and an empty field producing no partners and no unresolved value.
+- Severity: L3 and L4 are `skipped` with a reason; an unrecognised severity label is `failed`.
 - Signature verification, including a stale timestamp and a tampered body.
 - A correction that removes a partner deletes that partner's row.
 - Two corrections against the same version: the second is refused.
