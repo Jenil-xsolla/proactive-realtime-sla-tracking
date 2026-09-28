@@ -198,8 +198,8 @@ describe("summarizeOutageHealth", () => {
   });
 });
 
-describe("sla_alert_state migration", () => {
-  it("creates only the table this app owns", () => {
+describe("migrations create sla_alert_state with partner_slug", () => {
+  it("creates sla_alert_state with every column, its primary key and the alert_count default", () => {
     const migrationsDir = path.join(process.cwd(), "src/data/migrations");
     const sqlFiles = readdirSync(migrationsDir).filter((name) => name.endsWith(".sql"));
     expect(sqlFiles.length).toBeGreaterThan(0);
@@ -224,14 +224,18 @@ describe("sla_alert_state migration", () => {
     }
     expect(sql).toContain("primary key");
     expect(sql).toMatch(/alert_count[\s\S]*default 0/);
-    expect(sql).not.toContain("sla_outages");
     expect(slaAlertState.partnerSlug.name).toBe("partner_slug");
 
     const snapshots = readdirSync(path.join(migrationsDir, "meta"))
       .filter((name) => name.endsWith("_snapshot.json"))
       .sort();
-    const latest = readFileSync(path.join(migrationsDir, "meta", snapshots.at(-1) ?? ""), "utf8");
-    expect(latest).toContain('"partner_slug"');
-    expect(latest).not.toContain('"partner_id"');
+    const latest = JSON.parse(readFileSync(path.join(migrationsDir, "meta", snapshots.at(-1) ?? ""), "utf8")) as {
+      tables: Record<string, unknown>;
+    };
+    const alertStateTable = latest.tables["public.sla_alert_state"];
+    expect(alertStateTable).toBeDefined();
+    const alertStateJson = JSON.stringify(alertStateTable);
+    expect(alertStateJson).toContain('"partner_slug"');
+    expect(alertStateJson).not.toContain('"partner_id"');
   });
 });

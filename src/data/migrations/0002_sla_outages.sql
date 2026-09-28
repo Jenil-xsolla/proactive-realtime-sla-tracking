@@ -1,0 +1,23 @@
+CREATE TABLE "sla_outages" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"pir_key" text NOT NULL,
+	"partner" text NOT NULL,
+	"partner_id" text,
+	"incident_started" timestamp with time zone NOT NULL,
+	"affected_service" text NOT NULL,
+	"outage_minutes" numeric NOT NULL,
+	"severity" text,
+	"source" text NOT NULL,
+	"decision_type" text,
+	"reviewed_by" text,
+	"reason" text,
+	"reviewed_at" timestamp with time zone,
+	"pir_url" text,
+	CONSTRAINT "sla_outages_pir_key_partner_service_key" UNIQUE("pir_key","partner","affected_service"),
+	CONSTRAINT "sla_outages_source_check" CHECK ("sla_outages"."source" in ('pipeline','backfill')),
+	CONSTRAINT "sla_outages_decision_type_check" CHECK ("sla_outages"."decision_type" is null or "sla_outages"."decision_type" in ('system_written','human_corrected')),
+	CONSTRAINT "sla_outages_decision_type_source_check" CHECK (("sla_outages"."decision_type" is null) = ("sla_outages"."source" = 'backfill')),
+	CONSTRAINT "sla_outages_reviewed_by_check" CHECK (coalesce("sla_outages"."decision_type" = 'human_corrected', false) = ("sla_outages"."reviewed_by" is not null)),
+	CONSTRAINT "sla_outages_reviewed_at_check" CHECK (coalesce("sla_outages"."decision_type" = 'human_corrected', false) = ("sla_outages"."reviewed_at" is not null)),
+	CONSTRAINT "sla_outages_outage_minutes_check" CHECK ("sla_outages"."outage_minutes" > 0)
+);

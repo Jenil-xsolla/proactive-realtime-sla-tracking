@@ -15,6 +15,13 @@
       "when": 1790180000000,
       "tag": "0001_sla_alert_state_partner_slug",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790616243602,
+      "tag": "0002_sla_outages",
+      "breakpoints": true
     }
   ]
 }
