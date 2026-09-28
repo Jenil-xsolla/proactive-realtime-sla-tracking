@@ -50,7 +50,7 @@ export async function callSlack(input: CallSlackInput): Promise<SlackApiResult> 
   await sleep(first.waitMs);
   const second = await attempt(doFetch, input, now, timeoutMs);
   if (second.kind === "rate_limited") {
-    return { ok: false, error: "Slack rate limited the request (HTTP 429) after one retry." };
+    return { ok: false, error: "Slack rate limited the send (HTTP 429) after one retry." };
   }
   return finish(second);
 }
@@ -115,7 +115,7 @@ function finish(attemptResult: Attempt): SlackApiResult {
   if (attemptResult.kind === "rejected") {
     return { ok: false, error: attemptResult.error };
   }
-  return { ok: false, error: "Slack rate limited the request (HTTP 429) after one retry." };
+  return { ok: false, error: "Slack rate limited the send (HTTP 429) after one retry." };
 }
 
 function explainSlackError(error: string): string {
