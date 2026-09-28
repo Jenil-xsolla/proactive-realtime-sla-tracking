@@ -202,6 +202,44 @@ describe("readPir", () => {
     expect(result.problems.length).toBeGreaterThan(1);
   });
 
+  it("a plain-string merchants field is normalised like flattened ADF text (trim, collapse blank lines)", () => {
+    const pir = {
+      key: "GTO-9009",
+      fields: {
+        customfield_31331: 10,
+        customfield_11646: { value: "L1 — Critical", id: "1" },
+        customfield_10399: [{ id: "ari:cloud:graph::service/x/y" }],
+        customfield_13920: "  Scopely, 151639\n\n\nNiantic  ",
+        issuelinks: [
+          { id: "1", type: { id: "11031", name: "Post-Incident Reviews" }, outwardIssue: { key: "GTO-9000" } },
+        ],
+      },
+    };
+    const result = readPir(pir, baseUrl);
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.value.merchantText).toBe("Scopely, 151639\nNiantic");
+  });
+
+  it("a whitespace-only plain-string merchants field -> merchantText null", () => {
+    const pir = {
+      key: "GTO-9010",
+      fields: {
+        customfield_31331: 10,
+        customfield_11646: { value: "L1 — Critical", id: "1" },
+        customfield_10399: [{ id: "ari:cloud:graph::service/x/y" }],
+        customfield_13920: "   \n\n  ",
+        issuelinks: [
+          { id: "1", type: { id: "11031", name: "Post-Incident Reviews" }, outwardIssue: { key: "GTO-9000" } },
+        ],
+      },
+    };
+    const result = readPir(pir, baseUrl);
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(result.value.merchantText).toBeNull();
+  });
+
   it("never throws on a malformed payload", () => {
     expect(() => readPir(null, baseUrl)).not.toThrow();
     expect(() => readPir("not an object", baseUrl)).not.toThrow();

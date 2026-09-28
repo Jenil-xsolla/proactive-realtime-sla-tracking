@@ -208,6 +208,8 @@ function readMerchantText(fields: Record<string, unknown> | null): string | null
   }
 
   if (typeof raw === "string") {
+    // Not parsed as ADF, but normalised the same way flattened ADF text is:
+    // trim and collapse blank lines.
     const collapsed = collapseBlankLines(raw);
     return collapsed.length === 0 ? null : collapsed;
   }
