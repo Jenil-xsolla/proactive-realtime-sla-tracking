@@ -6,8 +6,7 @@ import type { ServiceEntry } from "./types";
  * Aliases are spacing variants of the same name, not other products.
  *
  * `aris` are the bare lowercase Jira ARI UUIDs (customfield_10399) for the
- * service, copied verbatim from n8n workflow ayGR5EibR4xQOf45, node "ARI to
- * ServiceName Mapping".
+ * service. One UUID maps to exactly one service.
  */
 export const SERVICES = [
   { id: "80lv", displayName: "80lv", aliases: [], aris: ["33eed602-87e4-11ec-897c-128b42819424"] },

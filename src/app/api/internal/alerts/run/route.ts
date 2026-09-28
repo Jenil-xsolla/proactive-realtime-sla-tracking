@@ -9,9 +9,9 @@ export const fetchCache = "force-no-store";
 const SECRET_HEADER = "x-internal-secret";
 
 /**
- * n8n calls this in two ways: a schedule at 01:00 and 13:00 UTC, and once
- * after a successful ingestion upsert. Each call is one evaluation pass.
- * n8n holds no alert logic.
+ * Called in two ways: by Cloud Scheduler at 01:00 and 13:00 UTC, and by the
+ * ingestion service after every capture or correction. Each call is one
+ * evaluation pass. Callers hold no alert logic.
  */
 export async function POST(request: Request) {
   noStore();

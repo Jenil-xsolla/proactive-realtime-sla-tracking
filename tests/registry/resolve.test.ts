@@ -166,11 +166,10 @@ describe("service registry", () => {
 });
 
 describe("service ARI registry", () => {
-  // Copied verbatim from n8n workflow ayGR5EibR4xQOf45, node "ARI to ServiceName
-  // Mapping" (see .superpowers/sdd/2026-09-28-ingestion-in-app-plan/n8n-ari-map.json).
-  // This table is independent of src/registry/services.ts so it pins the registry
-  // against the original n8n source rather than against itself.
-  const N8N_ARI_MAP: Record<string, string> = {
+  // The Jira service ARI UUIDs in use today, written out independently of
+  // src/registry/services.ts so the registry is pinned against a fixed table
+  // rather than against itself.
+  const EXPECTED_ARI_MAP: Record<string, string> = {
     "33eed602-87e4-11ec-897c-128b42819424": "80lv",
     "a44d02ba-865e-11ed-8d10-128b42819424": "AFS",
     "00f6a338-f4c9-11ef-8e10-0afff3dd3477": "ChatPlatform",
@@ -205,8 +204,8 @@ describe("service ARI registry", () => {
     "dceb1e8e-1640-11f1-b300-122ebd4873cf": "Xsolla Stack",
   };
 
-  it("has exactly 32 pairs copied from n8n", () => {
-    expect(Object.keys(N8N_ARI_MAP)).toHaveLength(32);
+  it("has exactly 32 expected pairs", () => {
+    expect(Object.keys(EXPECTED_ARI_MAP)).toHaveLength(32);
   });
 
   it("resolves a bare UUID", () => {
@@ -244,8 +243,8 @@ describe("service ARI registry", () => {
     }
   });
 
-  it("maps every n8n ARI to the service with that display name", () => {
-    for (const [uuid, displayName] of Object.entries(N8N_ARI_MAP)) {
+  it("maps every expected ARI to the service with that display name", () => {
+    for (const [uuid, displayName] of Object.entries(EXPECTED_ARI_MAP)) {
       const service = SERVICES.find((entry) => entry.displayName === displayName);
       expect(service, displayName).toBeDefined();
       expect(resolveServiceAri(uuid), displayName).toEqual({

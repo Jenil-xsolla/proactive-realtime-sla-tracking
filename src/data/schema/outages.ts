@@ -2,8 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, numeric, pgTable, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 /**
- * Owned by this repo (migrated from src/data/migrations, not the n8n
- * pipeline it replaces).
+ * Owned by this repo and created by src/data/migrations.
  *
  * outage_minutes is numeric and partner_id is text. node-postgres returns both
  * as strings. Leave them as strings here. partitionOutages parses each once.
