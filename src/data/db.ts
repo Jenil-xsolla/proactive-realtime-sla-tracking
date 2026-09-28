@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import { slaAlertState } from "./schema/alert-state";
 import { slaOutages } from "./schema/outages";
 
-const schema = { slaOutages, slaAlertState };
+export const schema = { slaOutages, slaAlertState };
 
 export function createDatabase(connectionString: string) {
   const pool = new Pool({ connectionString });
