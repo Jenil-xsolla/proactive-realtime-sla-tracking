@@ -17,3 +17,5 @@ export {
 export type { ResolvedPartner, CaptureRow } from "./resolution";
 export { verifySlackRequest } from "./notify/verify";
 export type { SlackVerifyResult } from "./notify/verify";
+export { triggerAlertRun } from "./notify/trigger-alerts";
+export type { TriggerAlertRunResult } from "./notify/trigger-alerts";
