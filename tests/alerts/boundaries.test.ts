@@ -22,7 +22,10 @@ describe("alert module boundaries", () => {
       expect(source).not.toContain("@/engine");
     }
     expect(sources.join("\n")).toContain("SLACK_BOT_TOKEN");
-    expect(sources.join("\n")).toContain("https://slack.com/api/chat.postMessage");
+    expect(sources.join("\n")).toContain('from "@/slack/client"');
+
+    const clientSource = readFileSync(path.join(process.cwd(), "src/slack/client.ts"), "utf8");
+    expect(clientSource).toContain("https://slack.com/api/chat.postMessage");
 
     const state = readFileSync(path.join(alertsDir, "state.ts"), "utf8");
     expect(state).toContain("pg_advisory_xact_lock");
