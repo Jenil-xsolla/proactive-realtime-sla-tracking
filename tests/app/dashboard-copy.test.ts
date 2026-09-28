@@ -15,6 +15,7 @@ import {
   SETTLED_LABEL,
   SETTLED_NOTE,
   ticketHref,
+  truncate,
 } from "@/app/dashboard/copy";
 
 describe("dashboard window", () => {
@@ -118,5 +119,9 @@ describe("dashboard copy", () => {
     for (const reason of UNUSABLE_REASONS) {
       expect(reasonLabel(reason)).not.toBe(reason);
     }
+  });
+
+  it("truncates by code point, so a surrogate pair is never split in half", () => {
+    expect(truncate("😀😀😀", 2)).toBe("😀…");
   });
 });

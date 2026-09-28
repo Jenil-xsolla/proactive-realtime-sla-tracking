@@ -3,7 +3,8 @@ import { evaluate, type PartnerScopes, type Window } from "@/engine";
 import { PARTNERS, type PartnerId } from "@/registry";
 import type { SlaScope } from "@/terms";
 import { toBusinessView } from "./business";
-import { readPartition, readTerms } from "./read";
+import { toIngestionCounts, toIngestionDetail } from "./ingestion";
+import { readIngestionHealth, readPartition, readTerms } from "./read";
 import { toTechnicalView } from "./technical";
 import type { FeedSources, SlaFeed } from "./types";
 import type { Viewer } from "./viewer";
@@ -28,6 +29,7 @@ export async function getSlaFeed(input: {
     asOf: input.asOf,
   });
   const health = summarizeOutageHealth(partition);
+  const ingestionResult = await readIngestionHealth(input.sources);
   const asOf = input.asOf.toISOString();
 
   if (input.viewer.role === "business") {
@@ -36,6 +38,7 @@ export async function getSlaFeed(input: {
       health,
       role: "business",
       rows: toBusinessView(evaluations, scopes),
+      ingestion: toIngestionCounts(ingestionResult),
     };
   }
 
@@ -45,6 +48,7 @@ export async function getSlaFeed(input: {
     health,
     role: input.viewer.role,
     rows: toTechnicalView(evaluations, partition.usable),
+    ingestion: toIngestionDetail(ingestionResult),
   };
 }
 

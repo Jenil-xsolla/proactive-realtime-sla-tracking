@@ -1,5 +1,6 @@
 import { summarizeOutageHealth } from "@/data";
-import { readPartition } from "./read";
+import { toIngestionCounts, toIngestionDetail } from "./ingestion";
+import { readIngestionHealth, readPartition } from "./read";
 import type { FeedSources, SlaHealth, UnusableRow } from "./types";
 import type { Viewer } from "./viewer";
 
@@ -11,10 +12,11 @@ export async function getSlaHealth(input: {
 }): Promise<SlaHealth> {
   const partition = await readPartition(input.sources);
   const health = summarizeOutageHealth(partition);
+  const ingestionResult = await readIngestionHealth(input.sources);
   const asOf = input.asOf.toISOString();
 
   if (input.viewer.role === "business") {
-    return { asOf, role: "business", health };
+    return { asOf, role: "business", health, ingestion: toIngestionCounts(ingestionResult) };
   }
 
   const unusable: UnusableRow[] = partition.unusable.map((row) => ({
@@ -27,5 +29,11 @@ export async function getSlaHealth(input: {
     reasons: row.reasons,
   }));
 
-  return { asOf, role: input.viewer.role, health, unusable };
+  return {
+    asOf,
+    role: input.viewer.role,
+    health,
+    unusable,
+    ingestion: toIngestionDetail(ingestionResult),
+  };
 }

@@ -13,6 +13,9 @@ export type { BaselineComparison } from "@/engine";
 export type {
   BusinessRow,
   FeedSources,
+  IngestionCounts,
+  IngestionHealthCounts,
+  IngestionHealthDetail,
   OutageProvenance,
   SlaFeed,
   SlaHealth,

@@ -13,6 +13,14 @@ export {
   type UnusableReason,
   type UsableOutage,
 } from "./outages";
+export {
+  loadIngestionHealth,
+  type FailedPirReview,
+  type IngestionHealth,
+  type IngestionHealthList,
+  type PirWithoutMessage,
+  type UnresolvedPirReview,
+} from "./pir-reviews";
 export { classifyPartnerCoverage, type ObservedPartnerPair, type RegistryReport } from "./registry-report";
 export { slaAlertState } from "./schema/alert-state";
 export { slaOutageCorrections } from "./schema/outage-corrections";
