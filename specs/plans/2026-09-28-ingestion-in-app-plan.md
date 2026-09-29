@@ -7,7 +7,7 @@
 
 ## Goal
 
-Replace the n8n "Real-Time SLA Tracking" workflow with an ingestion module inside the app. It captures approved PIRs from a Jira Automation webhook and writes `sla_outages` immediately. Each capture is posted to Slack with a Correct button that works at any time. The same image is deployed as two Cloud Run services, gated by `SERVICE_ROLE`.
+Build an ingestion module inside the app. It captures approved PIRs from a Jira Automation webhook and writes `sla_outages` immediately. Each capture is posted to Slack with a Correct button that works at any time. The same image is deployed as two Cloud Run services, gated by `SERVICE_ROLE`.
 
 ## Architecture overview
 
@@ -30,6 +30,8 @@ Slack Correct button ──▶ sla-ingestion /api/slack/interactions
 - The engine, `evaluate()` and the feed composition stay unchanged, apart from carrying `source` and the ingestion health section.
 - `src/proxy.ts` (Next 16's replacement for `middleware.ts`) is deny-by-default per role. `src/instrumentation.ts` throws at startup on a missing or unknown `SERVICE_ROLE`.
 
+
+
 ## Tech stack
 
 Next.js 16.3 App Router, TypeScript strict, Drizzle ORM 0.45 + node-postgres, Vitest 5, ESLint 9, pnpm 10. New dev dependency: `@electric-sql/pglite` for in-process Postgres in tests. No new runtime dependency: Jira, Slack and the GCP metadata server are all called with `fetch`.
@@ -38,40 +40,50 @@ Next.js 16.3 App Router, TypeScript strict, Drizzle ORM 0.45 + node-postgres, Vi
 
 These were settled with the user and go beyond or against the design as written. Task 0 writes them into the specs.
 
-| # | Decision | Effect |
-| --- | --- | --- |
-| D1 | Outage minutes come from Jira field `customfield_31331` on the PIR. The webhook body stays `{ issueKey }`. | The design stands. n8n read `outageMinutes`/`issueUrl` from the body; we don't. `pir_url` is built from the Jira base URL and key. |
-| D2 | A PIR with several services writes one row per (partner, service), identical apart from `affected_service`. | Unique key becomes `(pir_key, partner, affected_service)`, and `affected_service` becomes NOT NULL. The correction modal's service field becomes a multi-select, and a correction replaces the whole partner×service set. |
-| D3 | DB-backed tests use PGlite in-process and run the real migrations. | `pnpm test` stays self-contained, and CI is unchanged. |
-| D4 | `sla_pir_reviews` stores the extracted values (incident_started, outage_minutes, affected services, severity, pir_url). | The modal can prefill even when a PIR has zero rows. |
-| D5 | "Already corrected" is decided per PIR (`version > 0`), not per row. | On redelivery, a corrected PIR's rows are never touched, even when a correction left it with zero rows. An uncorrected PIR's system-written set is replaced wholesale, and rows Jira no longer lists are deleted. |
-| D6 | An ARI missing from the registry map is skipped and flagged as an unresolved value. It does not fail the PIR. | Unresolved values are typed: `{ kind: 'merchant' \| 'service_ari', raw }`. |
-| D7 | `sla-ingestion` runs with CPU always allocated (instance-based billing) and minimum instances 1. | The Slack route commits, responds within 3s, then runs `chat.update` and the alert trigger inside `after()`. |
-| D8 | Code scope includes the DB grants migration, the health panel UI and the deploy docs. The backfill import script is excluded; the spreadsheet layout is unknown. | Backfill import stays a manual cutover step. |
+
+| #   | Decision                                                                                                                                                         | Effect                                                                                                                                                                                                                    |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Outage minutes come from Jira field `customfield_31331` on the PIR. The webhook body stays `{ issueKey }`.                                                       | The design stands. We don't read `outageMinutes`/`issueUrl` from the body. `pir_url` is built from the Jira base URL and key.                                                                                             |
+| D2  | A PIR with several services writes one row per (partner, service), identical apart from `affected_service`.                                                      | Unique key becomes `(pir_key, partner, affected_service)`, and `affected_service` becomes NOT NULL. The correction modal's service field becomes a multi-select, and a correction replaces the whole partner×service set. |
+| D3  | DB-backed tests use PGlite in-process and run the real migrations.                                                                                               | `pnpm test` stays self-contained, and CI is unchanged.                                                                                                                                                                    |
+| D4  | `sla_pir_reviews` stores the extracted values (incident_started, outage_minutes, affected services, severity, pir_url).                                          | The modal can prefill even when a PIR has zero rows.                                                                                                                                                                      |
+| D5  | "Already corrected" is decided per PIR (`version > 0`), not per row.                                                                                             | On redelivery, a corrected PIR's rows are never touched, even when a correction left it with zero rows. An uncorrected PIR's system-written set is replaced wholesale, and rows Jira no longer lists are deleted.         |
+| D6  | An ARI missing from the registry map is skipped and flagged as an unresolved value. It does not fail the PIR.                                                    | Unresolved values are typed: `{ kind: 'merchant'                                                                                                                                                                          |
+| D7  | `sla-ingestion` runs with CPU always allocated (instance-based billing) and minimum instances 1.                                                                 | The Slack route commits, responds within 3s, then runs `chat.update` and the alert trigger inside `after()`.                                                                                                              |
+| D8  | Code scope includes the DB grants migration, the health panel UI and the deploy docs. The backfill import script is excluded; the spreadsheet layout is unknown. | Backfill import stays a manual cutover step.                                                                                                                                                                              |
+
+
+
 
 ## Assumptions to confirm before starting (small, but CLAUDE.md says ask)
 
 The implementer should get a yes/no on each before the task that depends on it. None of them changes task order.
 
-| # | Assumption | First used in |
-| --- | --- | --- |
-| A1 | `SERVICE_ROLE` values are `dashboard` and `ingestion`. The dashboard role also 404s the two ingestion paths, because the proxy denies by default in both directions. | Task 19 |
-| A2 | Env var names: `INGESTION_DATABASE_URL`, `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_WEBHOOK_SECRET` (header `Jira-Webhook-Token`, as n8n used), `SLACK_SIGNING_SECRET`, `SLACK_CHANNEL_INGESTION` (= `C0BUT8U637Y`), `DASHBOARD_INTERNAL_URL`. | Tasks 8, 15, 17, 18 |
-| A3 | Missing or zero `customfield_31331` means no outage, so the PIR is `skipped` (n8n's rule). A non-numeric value means `failed`. | Task 7 |
-| A4 | A missing incident link (type `11031`) or a missing incident `customfield_10068` means `failed`. n8n fell back to the PIR's `created` time, which is a different moment and would skew the timeline. | Task 7 |
-| A5 | The merchants field (`customfield_13920`, ADF) is split on commas, semicolons and newlines. An all-digit token is a merchant ID. Any other token is matched by exact normalised name or alias, with no substring match. | Tasks 6, 7 |
-| A6 | Severity is stored as the Jira option text (`customfield_11646.value`). The dashboard resolves it as it does today. A missing severity means `failed`. | Task 7 |
-| A7 | `partner_id` gets the merchant ID token when the match was by ID. Otherwise it gets the registry's single `merchantIds[0]`. A partner with more than one merchant ID and a name-only match would store null. | Task 10 |
-| A8 | Redelivery of `received` (an earlier attempt died mid-request) or `skipped` re-runs the PIR the same way as `failed`. A row lock (`SELECT … FOR UPDATE`) serialises concurrent deliveries. | Task 9 |
-| A9 | On an uncorrected redelivery, the original capture message is edited in place, not re-posted. | Task 16 |
+
+| #   | Assumption                                                                                                                                                                                                                                    | First used in       |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| A1  | `SERVICE_ROLE` values are `dashboard` and `ingestion`. The dashboard role also 404s the two ingestion paths, because the proxy denies by default in both directions.                                                                          | Task 19             |
+| A2  | Env var names: `INGESTION_DATABASE_URL`, `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_WEBHOOK_SECRET` (header `Jira-Webhook-Token`), `SLACK_SIGNING_SECRET`, `SLACK_CHANNEL_INGESTION` (= `C0BUT8U637Y`), `DASHBOARD_INTERNAL_URL`. | Tasks 8, 15, 17, 18 |
+| A3  | Missing or zero `customfield_31331` means no outage, so the PIR is `skipped`. A non-numeric value means `failed`.                                                                                                                             | Task 7              |
+| A4  | A missing incident link (type `11031`) or a missing incident `customfield_10068` means `failed`. The PIR's `created` time is a different moment and would skew the timeline, so it is not used as a fallback.                                 | Task 7              |
+| A5  | The merchants field (`customfield_13920`, ADF) is split on commas, semicolons and newlines. An all-digit token is a merchant ID. Any other token is matched by exact normalised name or alias, with no substring match.                       | Tasks 6, 7          |
+| A6  | Severity is stored as the Jira option text (`customfield_11646.value`). The dashboard resolves it as it does today. A missing severity means `failed`.                                                                                        | Task 7              |
+| A7  | `partner_id` gets the merchant ID token when the match was by ID. Otherwise it gets the registry's single `merchantIds[0]`. A partner with more than one merchant ID and a name-only match would store null.                                  | Task 10             |
+| A8  | Redelivery of `received` (an earlier attempt died mid-request) or `skipped` re-runs the PIR the same way as `failed`. A row lock (`SELECT … FOR UPDATE`) serialises concurrent deliveries.                                                    | Task 9              |
+| A9  | On an uncorrected redelivery, the original capture message is edited in place, not re-posted.                                                                                                                                                 | Task 16             |
+
+
+
 
 ## Conflicts between the code and the spec (spec wins, noted for the user)
 
-- `src/data/schema/outages.ts` calls `sla_outages` "read-only mirror of the n8n-owned table". It has `reviewedAt.defaultNow()` (the spec says null unless `human_corrected`) and no `source`/`reason`. Task 2 fixes it.
+- `src/data/schema/outages.ts` calls `sla_outages` a "read-only mirror", which is stale now that the app owns writes. It has `reviewedAt.defaultNow()` (the spec says null unless `human_corrected`) and no `source`/`reason`. Task 2 fixes it.
 - `drizzle.config.ts` excludes `sla_outages` on purpose. Task 2 includes it.
-- `src/app/api/internal/alerts/run/route.ts`'s doc comment says n8n calls the route. Task 22 fixes it.
+- `src/app/api/internal/alerts/run/route.ts`'s doc comment names the wrong caller. Task 22 fixes it.
 - `src/feed/types.ts` has `OutageProvenance` "null until sla_outages gains a source column". Task 3 wires it up.
 - Main spec §4 lists `.claude/rules/ingestion.md`, but `.claude/*` is now gitignored in the uncommitted `.gitignore` change. Task 22 creates the file locally only; it can't be committed. **The user needs to decide.**
+
+
 
 ## Prerequisites
 
@@ -79,6 +91,8 @@ The implementer should get a yes/no on each before the task that depends on it. 
 - [ ] Create a branch: `git switch -c ingestion-in-app`. Do not work on `main`.
 - [ ] Get Jira read credentials (email + API token) for Task 6.
 - [ ] Get confirmation on A1–A9.
+
+
 
 ## Conventions every task follows
 
@@ -89,6 +103,8 @@ The implementer should get a yes/no on each before the task that depends on it. 
 - Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ---
+
+
 
 ## Task 0: Bring both specs in line with D1–D8
 
@@ -105,6 +121,8 @@ The implementer should get a yes/no on each before the task that depends on it. 
 
 ---
 
+
+
 ## Task 1: PGlite test harness
 
 **Files:** `package.json` (add devDependency `@electric-sql/pglite`), `tests/support/database.ts` (new), `tests/support/database.test.ts` (new)
@@ -113,7 +131,8 @@ The implementer should get a yes/no on each before the task that depends on it. 
 - `createTestDatabase(): Promise<{ db, client, close }>`: opens an in-memory `PGlite` and creates the roles `app_user` and `ingestion_writer` (NOLOGIN) so the grants migration in Task 4 applies. It runs `migrate()` from `drizzle-orm/pglite/migrator` against `src/data/migrations`, and returns a Drizzle PGlite database typed with the same schema object as `src/data/db.ts`.
 - Export the schema object from `src/data/db.ts` (`export const schema`) so that the test DB and the production DB share one definition.
 
-**Tests (`tests/support/database.test.ts`):**
+**Tests (**`tests/support/database.test.ts`**):**
+
 - "applies the existing migrations": `sla_alert_state` exists with column `partner_slug` and not `partner_id`.
 
 **Test command:** `pnpm vitest run tests/support/database.test.ts`
@@ -121,6 +140,8 @@ The implementer should get a yes/no on each before the task that depends on it. 
 **Commit:** `test: add in-process Postgres harness running real migrations`
 
 ---
+
+
 
 ## Task 2: `sla_outages` owned by the repo, with constraints
 
@@ -139,7 +160,8 @@ The implementer should get a yes/no on each before the task that depends on it. 
   - `outage_minutes > 0`
 - `drizzle.config.ts`: `schema: "./src/data/schema/*.ts"`. Run `pnpm drizzle-kit generate --name sla_outages`. Read the generated SQL before committing: it must be a CREATE TABLE with the checks, and nothing else.
 
-**Tests (`tests/data/outages-schema.test.ts`, PGlite):**
+**Tests (**`tests/data/outages-schema.test.ts`**, PGlite):**
+
 - accepts a backfill row with null `decision_type` and null `reviewed_by`
 - rejects a backfill row with a `decision_type`
 - rejects a pipeline row with null `decision_type`
@@ -153,6 +175,8 @@ The implementer should get a yes/no on each before the task that depends on it. 
 **Commit:** `feat(data): own sla_outages schema with provenance check constraints`
 
 ---
+
+
 
 ## Task 3: Carry `source` through to the technical view
 
@@ -169,12 +193,15 @@ The implementer should get a yes/no on each before the task that depends on it. 
 
 ---
 
+
+
 ## Task 4: `sla_pir_reviews` and `sla_outage_corrections`
 
 **Files:** `src/data/schema/pir-reviews.ts` (new), `src/data/schema/outage-corrections.ts` (new), `src/data/db.ts` (schema object), `src/data/index.ts`, `src/data/migrations/0003_*.sql` (generated), `tests/data/ingestion-schema.test.ts` (new)
 **Action:** Create / generate
 
 `sla_pir_reviews`:
+
 - `pir_key` text, primary key
 - `status` text, not null, check in (`received`, `skipped`, `captured`, `failed`)
 - `version` int, not null, default 0
@@ -184,6 +211,7 @@ The implementer should get a yes/no on each before the task that depends on it. 
 - `received_at` timestamptz not null, `updated_at` timestamptz not null
 
 `sla_outage_corrections`:
+
 - `id` serial
 - `pir_key` text, not null, references `sla_pir_reviews`
 - `corrected_by` text not null, `corrected_at` timestamptz not null
@@ -197,6 +225,8 @@ The implementer should get a yes/no on each before the task that depends on it. 
 
 ---
 
+
+
 ## Task 5: Database users and grants
 
 **Files:** `src/data/migrations/0004_service_grants.sql` (hand-written via `drizzle-kit generate --custom --name service_grants`), `tests/data/grants.test.ts` (new)
@@ -204,7 +234,8 @@ The implementer should get a yes/no on each before the task that depends on it. 
 
 Grants exactly as in main spec §5.1. Also grant `USAGE` on the serial sequences that each writer needs (`sla_outages_id_seq` for `ingestion_writer`, `sla_outage_corrections_id_seq` for `ingestion_writer`). The migration assumes the roles exist, and the runbook in Task 21 says infra creates them first.
 
-**Tests (PGlite, `SET ROLE`):**
+**Tests (PGlite,** `SET ROLE`**):**
+
 - `app_user` can SELECT all three ingestion tables but cannot INSERT into `sla_outages`
 - `app_user` can write `sla_alert_state`
 - `ingestion_writer` can DELETE from `sla_outages`
@@ -218,30 +249,35 @@ If PGlite does not honour `SET ROLE`, fall back to asserting the rows in `inform
 
 ---
 
+
+
 ## Task 6: ARI map in the registry
 
 **Files:** `src/registry/services.ts`, `src/registry/types.ts`, `src/registry/resolve.ts`, `src/registry/index.ts`, `tests/registry/resolve.test.ts`
 **Action:** Modify
 
-- Service entries gain `aris: readonly string[]`, holding the 32 UUIDs from the n8n "ARI to ServiceName Mapping" node (workflow `ayGR5EibR4xQOf45`). Copy them exactly: the UUID for Payments is `271a0cee-45d2-11f0-81c7-122fa60ab53d`, and so on. Every current service has exactly one.
+- Service entries gain `aris: readonly string[]`, holding the 32 UUIDs from the previous service map. Copy them exactly: the UUID for Payments is `271a0cee-45d2-11f0-81c7-122fa60ab53d`, and so on. Every current service has exactly one.
 - `resolveServiceAri(ari: string): ResolveResult<ServiceId>` accepts a bare UUID or a full ARI (it takes the segment after the last `/`). It builds its lookup once and throws at module load on a UUID mapped to two services, the same way `buildLookup` does.
 
-**Tests:** resolves a bare UUID; resolves a full `ari:cloud:…/uuid`; an unknown UUID is unresolved with `raw` equal to the UUID; every `SERVICES` entry has at least one ARI; a table-driven test on all 32 pairs from n8n.
+**Tests:** resolves a bare UUID; resolves a full `ari:cloud:…/uuid`; an unknown UUID is unresolved with `raw` equal to the UUID; every `SERVICES` entry has at least one ARI; a table-driven test on all 32 pairs.
 
 **Test command:** `pnpm vitest run tests/registry/resolve.test.ts`
-**Commit:** `feat(registry): move the ARI-to-service map from n8n into the registry`
+**Commit:** `feat(registry): add the ARI-to-service map to the registry`
 
 ---
+
+
 
 ## Task 7: Record Jira fixtures, then extract fields from them
 
 **Step 7a — record (manual, no code):** with the Prerequisite credentials, fetch:
+
 - 3 PIRs: one with a single service, one with several services, one with no outage
 - their linked incidents
 
-Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,customfield_31331,customfield_10399,customfield_13920,customfield_10250,issuelinks`, and incident `fields=customfield_10068,created`. Save them as `tests/fixtures/jira/<key>.pir.json` and `<key>.incident.json`, with people's names, emails and account IDs redacted.
+Use these field lists: PIR `fields=summary,status,created,customfield_11646,customfield_31331,customfield_10399,customfield_13920,customfield_10250,issuelinks`, and incident `fields=customfield_10068,created`. Save them as `tests/fixtures/jira/<key>.pir.json` and `<key>.incident.json`, with people's names, emails and account IDs redacted.
 
-**Stop and ask the user if `customfield_31331` does not hold the outage minutes as a number (D1).**
+**Stop and ask the user if** `customfield_31331` **does not hold the outage minutes as a number (D1).**
 
 **Step 7b — extract:** `src/ingestion/jira/extract.ts`, `tests/ingestion/jira-extract.test.ts`
 
@@ -251,7 +287,7 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
   - `{ kind: "invalid"; missing: string[] }`
   - `{ kind: "ok"; value: { pirKey, pirUrl, severity, outageMinutes, incidentStarted: Date, serviceAris: string[], merchantValues: string[] } }`
 - `incidentKey(pir): string | null`: follows link type `11031`, outward then inward.
-- ADF text is flattened as in n8n (paragraph → text nodes). Merchant tokens are split per A5.
+- ADF text is flattened (paragraph → text nodes). Merchant tokens are split per A5.
 
 **Tests:** one per fixture; missing severity → `invalid`; missing incident start → `invalid` (A4); zero/absent minutes → `no_outage` (A3); non-numeric minutes → `invalid`; merchants text `"506855, Scopely\nNiantic Inc"` → three tokens.
 
@@ -259,6 +295,8 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
 **Commit:** `feat(ingestion): extract PIR fields from recorded Jira payloads`
 
 ---
+
+
 
 ## Task 8: Jira client
 
@@ -272,6 +310,8 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
 **Commit:** `feat(ingestion): Jira REST client`
 
 ---
+
+
 
 ## Task 9: Writer — receipt and status transitions
 
@@ -291,6 +331,8 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
 
 ---
 
+
+
 ## Task 10: Partner and service resolution
 
 **Files:** `src/ingestion/resolution/index.ts`, `tests/ingestion/resolution.test.ts`
@@ -306,12 +348,15 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
 
 ---
 
+
+
 ## Task 11: Writer — capture
 
 **Files:** `src/ingestion/writer.ts`, `tests/ingestion/writer-capture.test.ts`
 **Action:** Modify
 
 `captureRows(db, input: { pirKey, extracted, rows: CaptureRow[], unresolved: UnresolvedValue[] }, now): Promise<{ kind: "written"; rows } | { kind: "corrected_untouched" }>`, in one transaction:
+
 1. Lock the review. If `version > 0` → save the extracted values and return `corrected_untouched` (D5).
 2. Delete this PIR's rows whose `(partner, affected_service)` is not in `rows`.
 3. Upsert `rows` on `(pir_key, partner, affected_service)` with `source = 'pipeline'`, `decision_type = 'system_written'`, and reviewer fields null.
@@ -320,6 +365,7 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
 `CaptureRow` = partner display name, `partner_id` (A7), service display name, and the shared `incident_started`, minutes, severity and `pir_url`. Rows are the cross product of resolved partners × resolved services, built by `buildCaptureRows()` in `src/ingestion/resolution/`.
 
 **Tests (PGlite):**
+
 - two partners × two services → four rows
 - redelivery with changed minutes refreshes `system_written` rows
 - redelivery that drops a partner deletes that partner's rows
@@ -329,6 +375,8 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
 **Commit:** `feat(ingestion): write system rows per partner and service`
 
 ---
+
+
 
 ## Task 12: ESLint boundary for the writer and the ingestion DB client
 
@@ -343,6 +391,8 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
 **Commit:** `build(lint): only ingestion may import its writer and database client`
 
 ---
+
+
 
 ## Task 13: Shared Slack Web API caller
 
@@ -360,6 +410,8 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
 
 ---
 
+
+
 ## Task 14: Slack signature verification
 
 **Files:** `src/ingestion/notify/verify.ts`, `tests/ingestion/slack-verify.test.ts`
@@ -373,12 +425,15 @@ Use the n8n field lists: PIR `fields=summary,status,created,customfield_11646,cu
 
 ---
 
+
+
 ## Task 15: Alert trigger client
 
 **Files:** `src/ingestion/notify/trigger-alerts.ts`, `tests/ingestion/trigger-alerts.test.ts`
 **Action:** Create
 
 `triggerAlertRun({ fetch?, env? }): Promise<{ ok: boolean; error?: string }>`:
+
 1. Get an ID token from `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience={DASHBOARD_INTERNAL_URL}` with `Metadata-Flavor: Google`.
 2. POST `{DASHBOARD_INTERNAL_URL}/api/internal/alerts/run` with `Authorization: Bearer <token>` and `x-internal-secret`.
 
@@ -389,6 +444,8 @@ It never throws; the caller logs the result.
 **Commit:** `feat(ingestion): trigger the alert run with a Cloud Run identity token`
 
 ---
+
+
 
 ## Task 16: Capture message builder
 
@@ -404,6 +461,8 @@ It never throws; the caller logs the result.
 
 ---
 
+
+
 ## Task 17: `handlePirApproved` orchestration
 
 **Files:** `src/ingestion/handle-pir.ts`, `src/ingestion/index.ts`, `tests/ingestion/handle-pir.test.ts`
@@ -412,6 +471,7 @@ It never throws; the caller logs the result.
 `handlePirApproved(issueKey, deps: { db, jira, slack, triggerAlerts, now }): Promise<Outcome>` runs design §2 as amended: receipt, then fetch PIR, then `no_outage` → skipped. Next it fetches the incident, extracts, resolves, captures, and posts the message; a redelivery edits the original message instead (A9). A `corrected_untouched` result posts the Jira-changed note. Last it triggers alerts. Every error after receipt → `markFailed`, then post `failureNotice`. It never throws.
 
 **Tests (PGlite + fakes, design §4):**
+
 - happy path: rows, `captured`, message saved, trigger called
 - no outage → `skipped` with no message
 - Jira fetch fails → `failed` + notice
@@ -425,6 +485,8 @@ It never throws; the caller logs the result.
 
 ---
 
+
+
 ## Task 18: Route `POST /api/ingest/pir-approved`
 
 **Files:** `src/app/api/ingest/pir-approved/route.ts`, `tests/ingestion/pir-route.test.ts`
@@ -437,6 +499,8 @@ The `Jira-Webhook-Token` header is checked against `JIRA_WEBHOOK_SECRET` with th
 **Commit:** `feat(ingestion): Jira Automation webhook route`
 
 ---
+
+
 
 ## Task 19: Service role gating
 
@@ -454,6 +518,8 @@ The `Jira-Webhook-Token` header is checked against `JIRA_WEBHOOK_SECRET` with th
 
 ---
 
+
+
 ## Task 20: Corrections — modal, submission, transaction, route
 
 Four commits, each green.
@@ -467,6 +533,7 @@ Tests: prefill from rows; prefill from review values when there are zero rows (D
 Commit: `feat(ingestion): correction modal from the registry`
 
 **20c — handler:** `handleSlackInteraction(payload, deps)`.
+
 - `block_actions`/`correct` loads the review and rows, then calls `openView`.
 - `view_submission` parses and applies. A `stale` result returns `{ response_action: "errors" }` with *"someone else just corrected this; reopen to see the latest."*
 - On success it returns `{ response_action: "clear" }` plus a `followUp` function that runs `updateMessage` with the new values and the corrector's name, then `triggerAlertRun`. The follow-up logs failures (design §4 table).
@@ -479,6 +546,8 @@ Tests: 401 on a bad signature; a valid submission returns JSON and registers the
 Commit: `feat(ingestion): Slack interactions route`
 
 ---
+
+
 
 ## Task 21: Ingestion health on the dashboard
 
@@ -494,16 +563,20 @@ Commit: `feat(dashboard): ingestion health in the data health panel`
 
 ---
 
-## Task 22: Clean up n8n references and document the module
+
+
+## Task 22: Document the ingestion module
 
 **Files:** `src/app/api/internal/alerts/run/route.ts` (comment), `src/ingestion/README.md`, `src/data/README.md`, `src/app/README.md`, `.env.example` (all A2 vars, with `SLACK_CHANNEL_INGESTION` noted as `C0BUT8U637Y`), `README.md`
 **Action:** Modify
 
-`grep -rn "n8n" src scripts tests` should return nothing except historical notes. Create `.claude/rules/ingestion.md` locally only, if the user keeps `.claude/*` ignored (see Conflicts).
+Documentation should describe ingestion as it is now: triggered by the Jira webhook, resolving partners by registry lookup, writing directly. `git grep -inE 'n[8]n'` over the whole repo should return nothing. Create `.claude/rules/ingestion.md` locally only, if the user keeps `.claude/*` ignored (see Conflicts).
 
 **Commit:** `docs: ingestion module boundaries and configuration`
 
 ---
+
+
 
 ## Task 23: Deploy runbook
 
@@ -522,6 +595,8 @@ Commit: `feat(dashboard): ingestion health in the data health panel`
 
 ---
 
+
+
 ## Task 24: Final verification
 
 Run `pnpm test && pnpm lint && pnpm typecheck && pnpm build`. Then run `SERVICE_ROLE= pnpm build && SERVICE_ROLE= pnpm start` and confirm startup fails. Then use `@verification-before-completion` and `@finishing-a-development-branch`.
@@ -535,4 +610,4 @@ Run `pnpm test && pnpm lint && pnpm typecheck && pnpm build`. Then run `SERVICE_
 5. Point the Jira Automation webhook at `/api/ingest/pir-approved` with body `{ "issueKey": "{{issue.key}}" }` and the `Jira-Webhook-Token` header.
 6. Create the Cloud Scheduler job.
 7. Capture and correct a test PIR end to end.
-8. Archive n8n workflow `ayGR5EibR4xQOf45`.
+
