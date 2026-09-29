@@ -56,4 +56,14 @@ describe("sla_outage_corrections schema", () => {
       ),
     ).rejects.toThrow();
   });
+
+  it("indexes sla_outage_corrections by pir_key", async () => {
+    testDb = await createTestDatabase();
+
+    const result = await testDb.client.query<{ indexname: string }>(
+      `select indexname from pg_indexes where tablename = 'sla_outage_corrections'`,
+    );
+
+    expect(result.rows.map((row) => row.indexname)).toContain("sla_outage_corrections_pir_key_idx");
+  });
 });
