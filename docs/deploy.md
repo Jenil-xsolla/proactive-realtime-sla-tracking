@@ -122,26 +122,47 @@ are the exceptions — neither is a secret, and both are set as plain env vars.
 
 ## Database
 
-1. **Infra creates the roles before migrations run:** `app_user` and `ingestion_writer` must
-   already exist on the Cloud SQL instance. `src/data/migrations/0004_service_grants.sql` grants
-   to both roles and **fails if they don't exist yet** — this ordering is not optional.
-2. **Run the migrations** against `src/data/migrations` with the connection as the schema owner
-   role (not `app_user` or `ingestion_writer` — they only receive grants, they don't own the
-   schema). `drizzle-kit migrate` has no `--url` flag and `drizzle.config.ts` has no
-   `dbCredentials` hardcoded, so use `scripts/migrate.ts` (`pnpm db:migrate`) instead: it opens a
-   `pg` `Pool` from `MIGRATION_DATABASE_URL` and runs Drizzle's `node-postgres` migrator against
+1. **Responsibilities:** Infra/DBA provisions the Cloud SQL instance and database, an **owner**
+   login that owns the database (used only for running migrations), and the `app_user` and
+   `ingestion_writer` logins with no table privileges — the migrations grant those.
+   `src/data/migrations/0004_service_grants.sql` grants to both roles and **fails if they don't
+   exist yet**, so Infra must create all three logins before migrations run — this ordering is
+   not optional. Infra puts all three connection strings in Secret Manager, and grants the app
+   owner `roles/cloudsql.client` on the instance plus access to the owner secret. **The app
+   owner — the operator — runs the migrations from their own checkout**; the DBA needs no
+   repository access.
+
+2. **Run the migrations** through the Cloud SQL Auth Proxy, since the instance is on a private
+   IP and reaching it needs `roles/cloudsql.client`:
+
+   ```sh
+   cloud-sql-proxy <PROJECT>:us-west2:<INSTANCE> --port 5432
+   ```
+
+   Then, against `src/data/migrations`, with the connection as the schema owner role (not
+   `app_user` or `ingestion_writer` — they only receive grants, they don't own the schema).
+   `drizzle-kit migrate` has no `--url` flag and `drizzle.config.ts` has no `dbCredentials`
+   hardcoded, so use `scripts/migrate.ts` (`pnpm db:migrate`) instead: it opens a `pg` `Pool` from
+   `MIGRATION_DATABASE_URL` and runs Drizzle's `node-postgres` migrator against
    `src/data/migrations` directly.
 
    ```sh
-   MIGRATION_DATABASE_URL="<owner-role-connection-string>" pnpm db:migrate
+   MIGRATION_DATABASE_URL="postgres://<owner>:<password>@localhost:5432/<db>" pnpm db:migrate
    ```
 
-   - `MIGRATION_DATABASE_URL` — the schema-owner connection string, used only for this one-off
-     migration step. It is not part of either Cloud Run service's runtime environment and is
-     separate from `DATABASE_URL` (`app_user`) and `INGESTION_DATABASE_URL` (`ingestion_writer`)
-     above. Keep it in Secret Manager or an operator's local secret store, not as a service env var.
+   - `MIGRATION_DATABASE_URL` — the schema-owner connection string, pointed at the proxy's
+     `localhost:5432`, used only for this one-off migration step. It is not part of either Cloud
+     Run service's runtime environment and is separate from `DATABASE_URL` (`app_user`) and
+     `INGESTION_DATABASE_URL` (`ingestion_writer`) above. Keep it in Secret Manager or an
+     operator's local secret store, not as a service env var.
+   - The owner login must own the database, or have `CREATE` on it, because Drizzle creates a
+     `drizzle` schema for its `__drizzle_migrations` tracking table.
 
-3. **Verify on Cloud SQL (Postgres 15+)** that `GRANT USAGE ON SCHEMA public` took effect for
+3. **When:** once before the first deploy, and again before deploying any release that adds a
+   file under `src/data/migrations`. Re-running is safe — Drizzle records applied migrations in
+   `drizzle.__drizzle_migrations` and applies only the new files.
+
+4. **Verify on Cloud SQL (Postgres 15+)** that `GRANT USAGE ON SCHEMA public` took effect for
    both `app_user` and `ingestion_writer`. Cloud SQL Postgres 15+ revokes the default
    CREATE-and-USAGE-to-PUBLIC grant on the `public` schema, so a role without explicit `USAGE`
    cannot reach the tables inside it even after the table-level grants. The test suite only
@@ -214,8 +235,8 @@ request, not at the moment `next dev` starts.
 
 From `specs/plans/2026-09-28-ingestion-in-app-plan.md` ("Manual cutover checklist"):
 
-1. Infra creates the `app_user` and `ingestion_writer` roles, then run migrations on the GCP
-   database (see **Database** above).
+1. Infra provisions the instance, the owner login, `app_user` and `ingestion_writer`; the app
+   owner runs `pnpm db:migrate` through the Cloud SQL Auth Proxy (see **Database**).
 2. Import the historical spreadsheet with `source = 'backfill'`. This is a manual import — no
    script was planned for it.
 3. Deploy both services per this document.
