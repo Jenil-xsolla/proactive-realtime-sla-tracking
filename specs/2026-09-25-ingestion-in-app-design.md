@@ -102,7 +102,7 @@ The dashboard's health panel shows failed PIRs and captured PIRs with unresolved
 
 > GTO-543 captured. It will appear on the dashboard.
 
-followed by `pir_key` (linked), and for each row: partner, `partner_id`, `incident_started`, `affected_service`, `outage_minutes` and severity. The message states the count of non-pilot merchant IDs ignored, if any. Unresolved merchant values are still listed prominently, since they produce no rows until corrected. One button: **Correct**. It stays usable for as long as the message exists.
+with the PIR key linked in the heading — the only place it appears — followed by one line each for affected partners (each partner with its `partner_id`), affected service(s), outage minutes, severity and incident start. An Additional Comment line states the count of non-pilot merchant IDs ignored, when there is one. Unresolved merchant values are listed prominently above these lines, since they produce no rows until corrected. One button: **Correct**. It stays usable for as long as the message exists.
 
 **Correction modal:** a multi-select of registry partners prefilled with the current rows, a multi-select of registry services (`affected_service`) prefilled with the current rows, fields for `incident_started`, `outage_minutes` and severity prefilled with current values, and a reason field. The partner and service options come from the registry. Clearing every partner means no pilot partner was affected.
 

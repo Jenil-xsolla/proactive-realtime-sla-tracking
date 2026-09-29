@@ -26,8 +26,6 @@ export type LastCorrection = { by: string; at: Date };
 
 /** Slack rejects a message if any section's text exceeds this. */
 const MAX_SECTION_CHARS = 3000;
-/** Slack rejects a message with more than this many blocks. */
-const MAX_BLOCKS = 50;
 /** An unresolved raw can be a whole prose paragraph; keep it short in the message. */
 const UNRESOLVED_RAW_MAX = 500;
 
@@ -41,27 +39,42 @@ export type CaptureMessageInput = {
 };
 
 /**
- * Builds the capture-message posted to the engineering channel (spec §3).
- * Keeps every block within Slack's limits: each section's text stays at or
- * under 3000 characters, and the whole message stays under 50 blocks. The
- * `text` fallback is kept short (the header line only), since Slack only
- * shows it in places (like notifications) that don't render blocks.
+ * Builds the capture-message posted to the engineering channel (spec §3):
+ * a heading linking the PIR key, an optional unresolved-values warning, and
+ * one field line each for affected partners, affected service(s), outage
+ * minutes, severity, incident start and (when relevant) the non-pilot
+ * count — normally all one section, kept at or under Slack's 3000-char
+ * section limit; the block count stays small and well under Slack's
+ * 50-block cap regardless. The `text` fallback is kept short (the header
+ * line only), since Slack only shows it in places (like notifications)
+ * that don't render blocks.
  */
 export function captureMessage(input: CaptureMessageInput): SlackMessage {
   const { pirKey, pirUrl, rows, unresolved, nonPilotIdCount, lastCorrection } = input;
   const headerLine = `${pirKey} captured. It will appear on the dashboard.`;
 
-  const headerBlock = section(`${headerLine}\n${link(pirUrl, pirKey)}`);
+  const headingText = `*${link(pirUrl, pirKey)} captured.* It will appear on the dashboard.`;
+  const unresolvedLine = unresolved.length > 0 ? formatUnresolvedLine(unresolved) : null;
+  const fieldsLines = buildFieldsLines(rows, nonPilotIdCount);
 
-  const unresolvedBlock =
-    unresolved.length > 0
-      ? section(
-          [
-            ":warning: *Unresolved — these produce no rows until corrected*",
-            ...unresolved.map(formatUnresolved),
-          ].join("\n"),
-        )
-      : null;
+  const combinedText = [
+    headingText,
+    "",
+    ...(unresolvedLine ? [unresolvedLine] : []),
+    ...fieldsLines,
+  ].join("\n");
+
+  // Slack rejects a section over 3000 chars. The fields are always short, so
+  // if the combined text is too long it's the unresolved line (a raw value
+  // can be a whole prose paragraph, even truncated) — split it into its own
+  // section rather than the fields.
+  const mainSections: SectionBlock[] =
+    combinedText.length <= MAX_SECTION_CHARS
+      ? [section(combinedText)]
+      : [
+          section([headingText, "", ...(unresolvedLine ? [unresolvedLine] : [])].join("\n")),
+          section(fieldsLines.join("\n")),
+        ];
 
   const actionsBlock: ActionsBlock = {
     type: "actions",
@@ -87,18 +100,9 @@ export function captureMessage(input: CaptureMessageInput): SlackMessage {
       }
     : null;
 
-  // Reserve the fixed blocks (header, unresolved, actions, footer) out of
-  // Slack's 50-block cap, and give the rest to the row sections.
-  const reservedBlocks = 1 + (unresolvedBlock ? 1 : 0) + 1 + (footerBlock ? 1 : 0);
-  const availableRowBlocks = Math.max(1, MAX_BLOCKS - reservedBlocks);
-  const rowSections = buildRowsSections({ rows, nonPilotIdCount, availableBlocks: availableRowBlocks });
-
-  const blocks: SlackBlock[] = [headerBlock];
-  if (unresolvedBlock) {
-    blocks.push(unresolvedBlock);
-  }
-  blocks.push(...rowSections);
-  blocks.push(actionsBlock);
+  // Fixed, small block count (main section(s), actions, optional footer) —
+  // always well under Slack's 50-block cap.
+  const blocks: SlackBlock[] = [...mainSections, actionsBlock];
   if (footerBlock) {
     blocks.push(footerBlock);
   }
@@ -174,91 +178,75 @@ function link(url: string, label: string): string {
 }
 
 /**
- * Rows section(s) for the capture message (spec §3). A PIR can have many
- * (partner, service) rows — 11 partners × several services can exceed
- * Slack's 3000-char section limit — so the lines are split across as many
- * sections as needed, splitting only between lines (never mid-line). If
- * that would still need more sections than the caller's block budget
- * allows, the row count shown is trimmed and a "…and N more rows" line is
- * added instead.
+ * The field lines for the capture message (spec §3): affected partners,
+ * affected service(s), outage minutes, severity and incident start, plus an
+ * additional-comment line for the non-pilot count. Outage minutes, severity
+ * and incident start are identical across a PIR's rows, so they're read off
+ * the first row; with zero rows there's nothing to read, so those three
+ * lines are omitted entirely.
  */
-function buildRowsSections(input: {
-  rows: CaptureRow[];
-  nonPilotIdCount: number;
-  availableBlocks: number;
-}): SectionBlock[] {
-  const { rows, nonPilotIdCount, availableBlocks } = input;
-  const nonPilotLines =
-    nonPilotIdCount > 0 ? [`${nonPilotIdCount} non-pilot merchant ID(s) ignored.`] : [];
+function buildFieldsLines(rows: CaptureRow[], nonPilotIdCount: number): string[] {
+  const nonPilotLine = formatNonPilotComment(nonPilotIdCount);
 
   if (rows.length === 0) {
-    const lines = ["No pilot partner was attributed to this PIR.", ...nonPilotLines];
-    return chunkLines(lines, MAX_SECTION_CHARS).map(section);
-  }
-
-  for (let shown = rows.length; shown >= 0; shown -= 1) {
-    const truncationLine =
-      shown < rows.length ? [`…and ${rows.length - shown} more rows (see the dashboard).`] : [];
-    const lines = [...rows.slice(0, shown).map(formatRow), ...truncationLine, ...nonPilotLines];
-    const chunks = chunkLines(lines, MAX_SECTION_CHARS);
-    if (chunks.length <= availableBlocks || shown === 0) {
-      return chunks.map(section);
+    const lines = ["*Affected Partners:* None attributed", "*Affected Service(s):* —"];
+    if (nonPilotLine) {
+      lines.push(nonPilotLine);
     }
+    return lines;
   }
 
-  // Unreachable: the shown === 0 iteration above always returns.
-  return [];
+  const partners = distinct(
+    rows.map((row) => `${escapeMrkdwn(row.partner)} (${row.partnerId ? escapeMrkdwn(row.partnerId) : "—"})`),
+  );
+  const services = distinct(rows.map((row) => escapeMrkdwn(row.affectedService)));
+  const first = rows[0];
+
+  const lines = [
+    `*Affected Partners:* ${partners.join(", ")}`,
+    `*Affected Service(s):* ${services.join(", ")}`,
+    `*Outage Minutes:* ${first.outageMinutes}`,
+    `*Severity:* ${escapeMrkdwn(first.severity)}`,
+    `*Incident Started:* ${formatUtc(first.incidentStarted)}`,
+  ];
+  if (nonPilotLine) {
+    lines.push(nonPilotLine);
+  }
+  return lines;
+}
+
+/** Distinct values, first-occurrence order preserved. */
+function distinct(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function formatNonPilotComment(nonPilotIdCount: number): string | null {
+  if (nonPilotIdCount === 0) {
+    return null;
+  }
+  const noun = nonPilotIdCount === 1 ? "1 non-pilot merchant ID ignored." : `${nonPilotIdCount} non-pilot merchant ID(s) ignored.`;
+  return `*Additional Comment:* ${noun}`;
 }
 
 /**
- * Packs lines into as few chunks as possible, each joined text at most
- * `maxChars`, never splitting a line across two chunks.
+ * The unresolved warning line for the capture message (spec §3): a single,
+ * prominent line placed above the field lines, listing every unresolved
+ * value. An unresolved raw can be a whole prose paragraph (a free-text
+ * merchants field with no partner match and no digit run), so each is
+ * truncated for display to keep the section well under Slack's 3000-char
+ * limit.
  */
-function chunkLines(lines: string[], maxChars: number): string[] {
-  const chunks: string[] = [];
-  let current: string[] = [];
-  let currentLen = 0;
-
-  for (const line of lines) {
-    const addedLen = line.length + (current.length > 0 ? 1 : 0); // +1 for the joining "\n"
-    if (current.length > 0 && currentLen + addedLen > maxChars) {
-      chunks.push(current.join("\n"));
-      current = [line];
-      currentLen = line.length;
-    } else {
-      current.push(line);
-      currentLen += addedLen;
-    }
-  }
-  if (current.length > 0) {
-    chunks.push(current.join("\n"));
-  }
-  return chunks;
+function formatUnresolvedLine(items: UnresolvedValue[]): string {
+  const rendered = items.map(formatUnresolvedItem).join("; ");
+  return `:warning: *Unresolved (no rows until corrected):* ${rendered}`;
 }
 
-function formatRow(row: CaptureRow): string {
-  const partnerId = row.partnerId ?? "—";
-  return [
-    `*${escapeMrkdwn(row.partner)}*`,
-    partnerId,
-    formatUtc(row.incidentStarted),
-    escapeMrkdwn(row.affectedService),
-    `${row.outageMinutes} min`,
-    escapeMrkdwn(row.severity),
-  ].join(" · ");
-}
-
-/**
- * An unresolved raw can be a whole prose paragraph (a free-text merchants
- * field with no partner match and no digit run), so it's truncated for
- * display to keep the section well under Slack's 3000-char limit.
- */
-function formatUnresolved(item: UnresolvedValue): string {
+function formatUnresolvedItem(item: UnresolvedValue): string {
   const label = item.kind === "service_ari" ? "service" : "merchant";
   const display = item.kind === "service_ari" ? ariTrailingSegment(item.raw) : item.raw;
   const truncated = display.length > UNRESOLVED_RAW_MAX;
   const shown = truncated ? display.slice(0, UNRESOLVED_RAW_MAX) : display;
-  return `• ${label}: ${escapeMrkdwn(shown)}${truncated ? "…" : ""}`;
+  return `${label} "${escapeMrkdwn(shown)}${truncated ? "…" : ""}"`;
 }
 
 /** The trailing UUID after the last "/", or the whole ARI if there is none. */

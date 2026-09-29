@@ -29,7 +29,7 @@ function sectionTexts(blocks: { type: string; text?: { text: string } }[]): stri
 }
 
 describe("captureMessage", () => {
-  it("has the exact header line as both the first block line and the text fallback", () => {
+  it("has the exact header line as the text fallback, and its heading as the first block line", () => {
     const result = captureMessage({
       pirKey: PIR_KEY,
       pirUrl: PIR_URL,
@@ -40,7 +40,9 @@ describe("captureMessage", () => {
 
     expect(result.text).toBe(`${PIR_KEY} captured. It will appear on the dashboard.`);
     const firstSection = sectionTexts(result.blocks)[0];
-    expect(firstSection.split("\n")[0]).toBe(`${PIR_KEY} captured. It will appear on the dashboard.`);
+    expect(firstSection.split("\n")[0]).toBe(
+      `*<${PIR_URL}|${PIR_KEY}> captured.* It will appear on the dashboard.`,
+    );
   });
 
   it("links the PIR key to pirUrl", () => {
@@ -55,7 +57,7 @@ describe("captureMessage", () => {
     expect(firstSection).toContain(`<${PIR_URL}|${PIR_KEY}>`);
   });
 
-  it("places the unresolved section before any row content", () => {
+  it("places the unresolved line before *Affected Partners*", () => {
     const result = captureMessage({
       pirKey: PIR_KEY,
       pirUrl: PIR_URL,
@@ -63,11 +65,11 @@ describe("captureMessage", () => {
       unresolved: [{ kind: "merchant", raw: "Kabamster" }],
       nonPilotIdCount: 0,
     });
-    const texts = sectionTexts(result.blocks);
-    const unresolvedIndex = texts.findIndex((t) => t.includes("Unresolved"));
-    const rowIndex = texts.findIndex((t) => t.includes("Scopely"));
+    const text = sectionTexts(result.blocks).join("\n");
+    const unresolvedIndex = text.indexOf("Unresolved");
+    const partnersIndex = text.indexOf("*Affected Partners:*");
     expect(unresolvedIndex).toBeGreaterThanOrEqual(0);
-    expect(rowIndex).toBeGreaterThan(unresolvedIndex);
+    expect(partnersIndex).toBeGreaterThan(unresolvedIndex);
   });
 
   it("heads the unresolved section so it stands out", () => {
@@ -116,7 +118,7 @@ describe("captureMessage", () => {
     expect(unresolvedText).toContain("no-slash-ari");
   });
 
-  it("renders one line per row: partner, partner_id, UTC start, service, minutes, severity", () => {
+  it("renders the Affected Partners, Affected Service(s), Outage Minutes, Severity and Incident Started lines from the first row", () => {
     const result = captureMessage({
       pirKey: PIR_KEY,
       pirUrl: PIR_URL,
@@ -124,14 +126,12 @@ describe("captureMessage", () => {
       unresolved: [],
       nonPilotIdCount: 0,
     });
-    const texts = sectionTexts(result.blocks);
-    const rowText = texts.find((t) => t.includes("Scopely"));
-    expect(rowText).toContain("Scopely");
-    expect(rowText).toContain("151639");
-    expect(rowText).toContain("2026-09-25 10:05 UTC");
-    expect(rowText).toContain("API");
-    expect(rowText).toContain("45");
-    expect(rowText).toContain("L1 — Critical");
+    const text = sectionTexts(result.blocks).join("\n");
+    expect(text).toContain("*Affected Partners:* Scopely (151639)");
+    expect(text).toContain("*Affected Service(s):* API");
+    expect(text).toContain("*Outage Minutes:* 45");
+    expect(text).toContain("*Severity:* L1 — Critical");
+    expect(text).toContain("*Incident Started:* 2026-09-25 10:05 UTC");
   });
 
   it("shows an em dash for a missing partner_id", () => {
@@ -142,12 +142,28 @@ describe("captureMessage", () => {
       unresolved: [],
       nonPilotIdCount: 0,
     });
-    const texts = sectionTexts(result.blocks);
-    const rowText = texts.find((t) => t.includes("Scopely"));
-    expect(rowText).toContain("—");
+    const text = sectionTexts(result.blocks).join("\n");
+    expect(text).toContain("*Affected Partners:* Scopely (—)");
   });
 
-  it("states that no pilot partner was attributed when there are zero rows", () => {
+  it("shows distinct partners and services in row order, comma-separated", () => {
+    const result = captureMessage({
+      pirKey: PIR_KEY,
+      pirUrl: PIR_URL,
+      rows: [
+        row({ partner: "Scopely", partnerId: "151639", affectedService: "API" }),
+        row({ partner: "Niantic", partnerId: "221437", affectedService: "Payments" }),
+        row({ partner: "Scopely", partnerId: "151639", affectedService: "Payments" }),
+      ],
+      unresolved: [],
+      nonPilotIdCount: 0,
+    });
+    const text = sectionTexts(result.blocks).join("\n");
+    expect(text).toContain("*Affected Partners:* Scopely (151639), Niantic (221437)");
+    expect(text).toContain("*Affected Service(s):* API, Payments");
+  });
+
+  it("shows 'None attributed' and an em dash for services, with no minutes/severity/start lines, when there are zero rows", () => {
     const result = captureMessage({
       pirKey: PIR_KEY,
       pirUrl: PIR_URL,
@@ -155,11 +171,15 @@ describe("captureMessage", () => {
       unresolved: [],
       nonPilotIdCount: 0,
     });
-    const texts = sectionTexts(result.blocks);
-    expect(texts.some((t) => /no pilot partner/i.test(t))).toBe(true);
+    const text = sectionTexts(result.blocks).join("\n");
+    expect(text).toContain("*Affected Partners:* None attributed");
+    expect(text).toContain("*Affected Service(s):* —");
+    expect(text).not.toContain("*Outage Minutes:*");
+    expect(text).not.toContain("*Severity:*");
+    expect(text).not.toContain("*Incident Started:*");
   });
 
-  it("reports a non-zero non-pilot merchant ID count", () => {
+  it("reports a non-zero non-pilot merchant ID count, pluralized", () => {
     const result = captureMessage({
       pirKey: PIR_KEY,
       pirUrl: PIR_URL,
@@ -167,11 +187,23 @@ describe("captureMessage", () => {
       unresolved: [],
       nonPilotIdCount: 3,
     });
-    const texts = sectionTexts(result.blocks);
-    expect(texts.some((t) => t.includes("3 non-pilot merchant ID(s) ignored."))).toBe(true);
+    const text = sectionTexts(result.blocks).join("\n");
+    expect(text).toContain("*Additional Comment:* 3 non-pilot merchant ID(s) ignored.");
   });
 
-  it("omits the non-pilot count line when it is zero", () => {
+  it("uses the singular form for a non-pilot count of exactly 1", () => {
+    const result = captureMessage({
+      pirKey: PIR_KEY,
+      pirUrl: PIR_URL,
+      rows: [row()],
+      unresolved: [],
+      nonPilotIdCount: 1,
+    });
+    const text = sectionTexts(result.blocks).join("\n");
+    expect(text).toContain("*Additional Comment:* 1 non-pilot merchant ID ignored.");
+  });
+
+  it("omits the Additional Comment line when the non-pilot count is zero", () => {
     const result = captureMessage({
       pirKey: PIR_KEY,
       pirUrl: PIR_URL,
@@ -180,7 +212,7 @@ describe("captureMessage", () => {
       nonPilotIdCount: 0,
     });
     const texts = sectionTexts(result.blocks);
-    expect(texts.some((t) => t.includes("non-pilot"))).toBe(false);
+    expect(texts.some((t) => t.includes("Additional Comment"))).toBe(false);
   });
 
   it("has exactly one Correct button carrying the PIR key", () => {
@@ -263,7 +295,7 @@ describe("captureMessage", () => {
     expect(unresolvedText).not.toContain("x".repeat(501));
   });
 
-  it("splits many rows across sections, each under Slack's 3000-char limit, preserving row order", () => {
+  it("keeps every section under Slack's 3000-char limit and preserves partner order with many distinct partners", () => {
     const rows: CaptureRow[] = [];
     for (let p = 1; p <= 11; p += 1) {
       for (let s = 1; s <= 4; s += 1) {
@@ -292,19 +324,76 @@ describe("captureMessage", () => {
       }
     }
 
-    const texts = sectionTexts(result.blocks);
-    const rowTexts = texts.filter((t) => !t.includes("captured. It will appear"));
-    expect(rowTexts.length).toBeGreaterThan(1);
-    const combined = rowTexts.join("\n");
-
-    // All 44 rows appear, and in the same order they were given.
+    const text = sectionTexts(result.blocks).join("\n");
+    // The 11 distinct partners appear once each, in first-occurrence order.
     let cursor = -1;
-    for (const r of rows) {
-      const marker = `*${r.partner}*`;
-      const index = combined.indexOf(marker, cursor + 1);
+    for (let p = 1; p <= 11; p += 1) {
+      const marker = `Partner${String(p).padStart(2, "0")} (${100000 + p})`;
+      const index = text.indexOf(marker, cursor + 1);
       expect(index).toBeGreaterThan(cursor);
       cursor = index;
     }
+    expect(text).toContain("*Affected Service(s):* Service1, Service2, Service3, Service4");
+  });
+
+  it("exactly matches the approved layout for a GTO-200-like input", () => {
+    const gtoRows: CaptureRow[] = [
+      { partner: "Scopely", partnerId: "151639" },
+      { partner: "Niantic", partnerId: "221437" },
+      { partner: "Bandai Namco", partnerId: "334455" },
+      { partner: "Roblox", partnerId: "445566" },
+      { partner: "Twitch", partnerId: "556677" },
+      { partner: "Nexters", partnerId: "667788" },
+      { partner: "Netmarble", partnerId: "778899" },
+    ].map((overrides) =>
+      row({
+        ...overrides,
+        affectedService: "Payments",
+        outageMinutes: 25,
+        severity: "L1 — Critical",
+        incidentStarted: new Date("2026-07-24T04:15:00.000Z"),
+      }),
+    );
+
+    const result = captureMessage({
+      pirKey: "GTO-200",
+      pirUrl: "https://xsolla.atlassian.net/browse/GTO-200",
+      rows: gtoRows,
+      unresolved: [],
+      nonPilotIdCount: 1,
+    });
+
+    const firstSection = sectionTexts(result.blocks)[0];
+    expect(firstSection).toBe(
+      [
+        "*<https://xsolla.atlassian.net/browse/GTO-200|GTO-200> captured.* It will appear on the dashboard.",
+        "",
+        "*Affected Partners:* Scopely (151639), Niantic (221437), Bandai Namco (334455), Roblox (445566), Twitch (556677), Nexters (667788), Netmarble (778899)",
+        "*Affected Service(s):* Payments",
+        "*Outage Minutes:* 25",
+        "*Severity:* L1 — Critical",
+        "*Incident Started:* 2026-07-24 04:15 UTC",
+        "*Additional Comment:* 1 non-pilot merchant ID ignored.",
+      ].join("\n"),
+    );
+  });
+
+  it("mentions the PIR key exactly once, inside the heading link", () => {
+    const result = captureMessage({
+      pirKey: PIR_KEY,
+      pirUrl: PIR_URL,
+      rows: [row()],
+      unresolved: [],
+      nonPilotIdCount: 0,
+    });
+    const firstSection = sectionTexts(result.blocks)[0];
+    const link = `<${PIR_URL}|${PIR_KEY}>`;
+    expect(firstSection).toContain(link);
+    // Removing the one heading link should leave no other mention of the key
+    // (PIR_URL itself contains the key as a substring, so a naive count
+    // would over-count; strip the link first).
+    const withoutLink = firstSection.replace(link, "");
+    expect(withoutLink).not.toContain(PIR_KEY);
   });
 });
 
