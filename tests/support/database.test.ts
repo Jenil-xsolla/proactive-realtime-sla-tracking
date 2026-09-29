@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { loadOutages } from "@/data";
-import type { Database } from "@/data/db";
 import { createTestDatabase } from "./database";
 
 describe("createTestDatabase", () => {
@@ -16,16 +15,13 @@ describe("createTestDatabase", () => {
       expect(columnNames).toContain("partner_slug");
       expect(columnNames).not.toContain("partner_id");
 
-      // Compile-time only: the harness's db must satisfy the same
-      // driver-neutral `Database` type production code (writer/loader
-      // functions such as loadOutages) is typed against. sla_outages
-      // doesn't exist in the migrations yet, so this is asserted at the
-      // type level and never actually invoked (which would fail at
-      // runtime with a missing-table error).
-      const _db: Database = db;
-      const _dbForLoadOutages: Parameters<typeof loadOutages>[0] = db;
-      void _db;
-      void _dbForLoadOutages;
+      // The harness's db must satisfy the same driver-neutral `Database`
+      // type production code (writer/loader functions such as loadOutages)
+      // is typed against, and sla_outages must actually exist by now — so
+      // this calls loadOutages for real rather than asserting the type only.
+      const partition = await loadOutages(db);
+      expect(partition.usable).toEqual([]);
+      expect(partition.unusable).toEqual([]);
     } finally {
       await close();
     }

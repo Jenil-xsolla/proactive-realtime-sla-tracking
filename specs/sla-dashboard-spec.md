@@ -205,7 +205,7 @@ Each service connects with its own database user, so the boundary is enforced by
 
 | User | Service | Access |
 | --- | --- | --- |
-| `ingestion_writer` | `sla-ingestion` | SELECT/INSERT/UPDATE/DELETE on `sla_outages` (DELETE because a correction can remove a partner); SELECT/INSERT/UPDATE on `sla_pir_reviews`; SELECT/INSERT on `sla_outage_corrections` |
+| `ingestion_writer` | `sla-ingestion` | SELECT/INSERT/UPDATE/DELETE on `sla_outages` (DELETE because a correction can remove a partner or service, and an uncorrected redelivery deletes rows Jira no longer lists); SELECT/INSERT/UPDATE on `sla_pir_reviews`; SELECT/INSERT on `sla_outage_corrections` |
 | `app_user` | `sla-dashboard` | SELECT on `sla_outages`, `sla_pir_reviews`, `sla_outage_corrections`; SELECT/INSERT/UPDATE on `sla_alert_state` |
 
 ### 5.2 Other tables

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { isPathAllowed, readServiceRole } from "@/service-role";
 import { proxy } from "@/proxy";
@@ -162,5 +162,41 @@ describe("register", () => {
     process.env.SERVICE_ROLE = "dashboard";
 
     expect(() => register()).not.toThrow();
+  });
+
+  it("calls an injected exit(1) on a bad role, and still throws", () => {
+    const exit = vi.fn();
+    const log = vi.fn();
+
+    expect(() => register({ env: {}, exit, log })).toThrow(
+      "SERVICE_ROLE must be 'dashboard' or 'ingestion', got undefined",
+    );
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(log).toHaveBeenCalledWith(
+      "[startup] SERVICE_ROLE must be 'dashboard' or 'ingestion', got undefined. Refusing to start.",
+    );
+  });
+
+  it("calls process.exit(1) when NEXT_RUNTIME is nodejs and no exit override is given", () => {
+    delete process.env.SERVICE_ROLE;
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    try {
+      expect(() => register()).toThrow(
+        "SERVICE_ROLE must be 'dashboard' or 'ingestion', got undefined",
+      );
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      exitSpy.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("never calls exit on a valid SERVICE_ROLE", () => {
+    const exit = vi.fn();
+
+    expect(() => register({ env: { SERVICE_ROLE: "ingestion" }, exit })).not.toThrow();
+    expect(exit).not.toHaveBeenCalled();
   });
 });

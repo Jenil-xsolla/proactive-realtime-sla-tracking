@@ -1,6 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { NextResponse } from "next/server";
-import { defaultPirDeps, handlePirApproved } from "@/ingestion";
+import { runPirApproved } from "@/ingestion";
 import { secretMatches } from "@/app/api/shared-secret";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ const SECRET_HEADER = "jira-webhook-token";
  * shared-secret header on every PIR approval, including a redelivery.
  * Jira Automation does not retry, so every outcome — including `failed`
  * and `receipt_failed` — gets a 200 (spec §2 "On failure at any step");
- * the error itself is recorded by `handlePirApproved`, not surfaced here.
+ * the error itself is recorded by `runPirApproved`, not surfaced here.
  */
 export async function POST(request: Request) {
   noStore();
@@ -42,15 +42,14 @@ export async function POST(request: Request) {
     return json({ error: "issueKey is required." }, 400);
   }
 
-  let deps;
+  let outcome;
   try {
-    deps = defaultPirDeps();
+    outcome = await runPirApproved(issueKey);
   } catch (error) {
-    console.error(`defaultPirDeps failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`runPirApproved failed: ${error instanceof Error ? error.message : String(error)}`);
     return json({ error: "ingestion is not configured" }, 500);
   }
 
-  const outcome = await handlePirApproved(issueKey, deps);
   return json({ issueKey, outcome: outcome.kind }, 200);
 }
 

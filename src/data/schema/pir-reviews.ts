@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, integer, jsonb, numeric, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 /**
- * An unresolved value found while extracting a PIR (D6): a merchant or
+ * An unresolved value found while extracting a PIR: a merchant or
  * service ARI that could not be matched in the registry. It does not
  * fail the PIR; it is recorded here so a person can decide.
  */
@@ -11,14 +11,14 @@ export type UnresolvedValue = { kind: "merchant" | "service_ari"; raw: string };
 /**
  * Ingestion log, one row per PIR (`pir_key`). Makes a half-processed PIR
  * visible instead of lost. The extracted values below are nullable
- * because they are unknown until the fetch runs (D4), so the correction
+ * because they are unknown until the fetch runs, so the correction
  * modal can still prefill even when the PIR has zero sla_outages rows.
  *
  * outage_minutes is numeric, like sla_outages.outage_minutes: node-postgres
  * returns it as a string.
  *
  * version starts at 0 and is incremented on every correction; "already
- * corrected" is decided per PIR from version > 0, not per row (D5).
+ * corrected" is decided per PIR from version > 0, not per row.
  */
 export const slaPirReviews = pgTable(
   "sla_pir_reviews",

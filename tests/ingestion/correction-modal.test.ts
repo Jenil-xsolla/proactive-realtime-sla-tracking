@@ -104,6 +104,19 @@ describe("correctionModal", () => {
     expect(severityElement.initial_option?.value).toBe("l2");
   });
 
+  it("prefills severity by resolving the current rows' text, not exact displayName equality (an ASCII hyphen still matches the registry's em dash)", () => {
+    const view = correctionModal({
+      pirKey: "GTO-543",
+      version: 0,
+      rows: [outageRow({ severity: "L1 - Critical" })],
+      review: review({ severity: "L1 - Critical" }),
+    }) as { blocks: Record<string, unknown>[] };
+
+    const severityBlock = findBlock(view, "severity");
+    const severityElement = severityBlock.element as { initial_option?: { value: string } };
+    expect(severityElement.initial_option?.value).toBe("l1");
+  });
+
   it("prefills services from the review's affectedServices when there are zero rows (D4)", () => {
     const view = correctionModal({
       pirKey: "GTO-999",

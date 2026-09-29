@@ -120,7 +120,7 @@ function finish(attemptResult: Attempt): SlackApiResult {
 
 function explainSlackError(error: string): string {
   if (error === "not_in_channel") {
-    return "not_in_channel: the bot is not a member of this channel. Invite it, then the next run will retry. The bot needs the chat:write scope.";
+    return "not_in_channel: the bot is not a member of this channel. Invite it, then retry. The bot needs the chat:write scope.";
   }
   if (error === "channel_not_found") {
     return "channel_not_found: Slack has no channel with this id.";

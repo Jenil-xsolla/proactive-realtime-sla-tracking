@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { DrizzleQueryError, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { slaOutages, slaPirReviews } from "@/data";
 import type { JiraFetchResult } from "@/ingestion/jira/client";
@@ -205,6 +205,20 @@ describe("handlePirApproved", () => {
     expect(fetchCalls).toEqual(["GTO-913"]);
   });
 
+  it("handleSkip: wasCaptured throwing returns failed through fail(), never falling through to markSkipped", async () => {
+    testDb = await createTestDatabase();
+    testDb.db.select = (() => {
+      throw new Error("select boom");
+    }) as typeof testDb.db.select;
+    const { deps, postCalls } = buildDeps(testDb);
+
+    const outcome = await handlePirApproved("GTO-913", deps);
+
+    expect(outcome).toEqual<PirOutcome>({ kind: "failed", error: "select boom" });
+    expect(postCalls).toHaveLength(1);
+    expect(postCalls[0]?.text).toContain("GTO-913 failed to capture");
+  });
+
   it("Jira fetch failure -> failed, notice posted, review marked failed", async () => {
     testDb = await createTestDatabase();
     const { fetchIssue } = fakeFetchIssue({ "GTO-200": { ok: false, error: "Jira is down" } });
@@ -249,6 +263,44 @@ describe("handlePirApproved", () => {
 
     const rows = await readOutages(testDb, "GTO-200");
     expect(rows).toHaveLength(0);
+  });
+
+  it("a DrizzleQueryError's real cause (not the wrapped SQL) reaches the outcome and the notice, capped at 500 chars", async () => {
+    testDb = await createTestDatabase();
+    const longSql = "insert into sla_outages ".repeat(500);
+    // recordReceipt's own transaction (call 1) must still succeed so the
+    // flow reaches captureRows; captureRows' transaction (call 2) is the
+    // one that throws, exercising "captureRows throws" specifically.
+    const originalTransaction = testDb.db.transaction.bind(testDb.db);
+    let transactionCalls = 0;
+    testDb.db.transaction = ((callback: Parameters<typeof originalTransaction>[0]) => {
+      transactionCalls += 1;
+      if (transactionCalls === 2) {
+        throw new DrizzleQueryError(longSql, [], new Error("permission denied for table sla_outages"));
+      }
+      return originalTransaction(callback);
+    }) as typeof testDb.db.transaction;
+    const { deps, postCalls } = buildDeps(testDb);
+
+    const outcome = await handlePirApproved("GTO-200", deps);
+
+    expect(outcome.kind).toBe("failed");
+    if (outcome.kind === "failed") {
+      expect(outcome.error).toContain("permission denied for table sla_outages");
+      expect(outcome.error).not.toContain("insert into sla_outages");
+      expect(outcome.error.length).toBeLessThanOrEqual(501);
+    }
+
+    expect(postCalls).toHaveLength(1);
+    expect(postCalls[0]?.text).toContain("GTO-200 failed to capture");
+    for (const block of postCalls[0]?.blocks ?? []) {
+      const text = (block as { text?: { text?: string } }).text?.text;
+      if (typeof text === "string") {
+        expect(text.length).toBeLessThanOrEqual(3000);
+      }
+    }
+    const noticeText = JSON.stringify(postCalls[0]?.blocks);
+    expect(noticeText).toContain("permission denied for table sla_outages");
   });
 
   it("Slack ok:false on the capture message -> rows written, slack_error saved, messagePosted false", async () => {

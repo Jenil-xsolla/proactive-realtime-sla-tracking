@@ -1,6 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { NextResponse, after } from "next/server";
-import { defaultInteractionDeps, handleSlackInteraction, verifySlackRequest } from "@/ingestion";
+import { runSlackInteraction, verifySlackRequest } from "@/ingestion";
 
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
@@ -12,9 +12,9 @@ export const fetchCache = "force-no-store";
  * covers the raw bytes, not the parsed form), verifies it, then parses the
  * `payload` form field.
  *
- * `sla-ingestion` runs with CPU always allocated and minimum instances 1
- * (D7), so `after()` here is safe: it responds within Slack's 3s window
- * first, then runs `chat.update` and the alert trigger in the background.
+ * `sla-ingestion` runs with CPU always allocated and minimum instances 1,
+ * so `after()` here is safe: it responds within Slack's 3s window first,
+ * then runs `chat.update` and the alert trigger in the background.
  */
 export async function POST(request: Request) {
   noStore();
@@ -43,15 +43,13 @@ export async function POST(request: Request) {
     return json({ error: "payload must be JSON." }, 400);
   }
 
-  let deps;
+  let result;
   try {
-    deps = defaultInteractionDeps();
+    result = await runSlackInteraction(payload);
   } catch (error) {
-    console.error(`defaultInteractionDeps failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`runSlackInteraction failed: ${error instanceof Error ? error.message : String(error)}`);
     return json({ error: "ingestion is not configured" }, 500);
   }
-
-  const result = await handleSlackInteraction(payload, deps);
 
   if (result.followUp) {
     after(result.followUp);

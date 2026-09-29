@@ -350,6 +350,20 @@ describe("failureNotice", () => {
     expect(allText).not.toContain("<500>");
     expect(result.blocks.some((b) => b.type === "actions")).toBe(false);
   });
+
+  it("caps a long error at 500 characters plus an ellipsis, keeping every section under Slack's 3000-char limit", () => {
+    const longError = "insert into sla_outages ".repeat(500);
+    const result = failureNotice({ pirKey: PIR_KEY, pirUrl: PIR_URL, error: longError });
+
+    for (const block of result.blocks) {
+      if (block.type === "section") {
+        expect(block.text.text.length).toBeLessThanOrEqual(3000);
+      }
+    }
+    const allText = JSON.stringify(result.blocks);
+    expect(allText).toContain("…");
+    expect(allText.length).toBeLessThan(longError.length);
+  });
 });
 
 describe("correctedAfterJiraChangeNote", () => {

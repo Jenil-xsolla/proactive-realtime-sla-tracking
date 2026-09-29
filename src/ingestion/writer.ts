@@ -11,7 +11,7 @@ export type ReceiptResult = {
 
 /**
  * Values extracted from a PIR (spec §2 step 3), stored on the review row so
- * the correction modal can prefill even when the PIR has zero rows (D4).
+ * the correction modal can prefill even when the PIR has zero rows.
  * `affectedServices` holds display names, not ARIs.
  */
 export type ExtractedValues = {
@@ -30,7 +30,7 @@ export type CaptureResult = { kind: "written"; rowCount: number } | { kind: "cor
  * never nothing.
  *
  * Runs as one transaction that locks the review row with `SELECT … FOR
- * UPDATE`, serialising concurrent deliveries of the same PIR (A8). To avoid
+ * UPDATE`, serialising concurrent deliveries of the same PIR. To avoid
  * two first deliveries both reporting "new", the insert is attempted with
  * `ON CONFLICT DO NOTHING` before the locked select: whichever transaction's
  * insert actually lands is the one that reports "new"; a transaction that
@@ -38,11 +38,11 @@ export type CaptureResult = { kind: "written"; rowCount: number } | { kind: "cor
  *
  * - No existing row: insert `received`, receivedAt = updatedAt = now → "new".
  * - Existing row `failed`, `skipped` or `received`: set `received`, clear
- *   `error`, set updatedAt → "retry" (A8: redelivery of an in-flight or
+ *   `error`, set updatedAt → "retry" (redelivery of an in-flight or
  *   skipped PIR re-runs it the same way as a failed one).
  * - Existing row `captured`: left untouched → "redelivery". Whether this
  *   redelivery may still rewrite rows is decided later, per PIR, from
- *   `version` (D5) — not this function's concern.
+ *   `version` — not this function's concern.
  */
 export async function recordReceipt(db: Database, pirKey: string, now: Date): Promise<ReceiptResult> {
   return db.transaction(async (tx) => {
@@ -89,7 +89,7 @@ export async function recordReceipt(db: Database, pirKey: string, now: Date): Pr
  * marks the review `captured` (spec §2 step 5). Runs as one transaction
  * that locks the review row with `SELECT … FOR UPDATE`.
  *
- * A PIR is "corrected" per-PIR, from `version > 0` (D5), not per row. On a
+ * A PIR is "corrected" per-PIR, from `version > 0`, not per row. On a
  * corrected PIR this is a no-op: the review row — including whatever
  * extracted values a correction stored — is left completely untouched, and
  * `{ kind: "corrected_untouched" }` is returned. A later correction task
@@ -409,7 +409,7 @@ export type ReviewForCorrection = { version: number; extracted: ExtractedValues 
  * Reads the version and extracted values the correction flow needs: the
  * "Correct" click loads this to build the modal (with `getOutageRows`),
  * and the submission handler loads it again for the PIR's `pir_url`
- * (spec §3, D4 — the extracted values make prefill possible even with
+ * (spec §3 — the extracted values make prefill possible even with
  * zero rows). `undefined` when the PIR has never been captured, so there
  * is nothing to correct yet.
  */
@@ -471,7 +471,7 @@ export async function getLatestCorrection(db: Database, pirKey: string): Promise
 }
 
 /**
- * Marks a PIR skipped (A3/E4: no outage, or an L3/L4 severity). `error`
+ * Marks a PIR skipped (no outage, or an L3/L4 severity). `error`
  * doubles as the skip reason column — there is no separate reason field.
  * Throws if the PIR was never received, since every caller records
  * receipt first.
@@ -534,7 +534,7 @@ export async function saveSlackError(db: Database, pirKey: string, error: string
 
 /**
  * Reads the review's saved Slack reference, so a redelivery can edit the
- * existing capture message in place (A9) instead of posting a new one.
+ * existing capture message in place instead of posting a new one.
  * Returns `undefined` when there is no review row at all.
  */
 export async function getSlackRef(

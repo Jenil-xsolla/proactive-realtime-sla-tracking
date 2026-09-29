@@ -1,4 +1,4 @@
-import { PARTNERS, SERVICES, SEVERITIES, resolvePartner, resolveService, type PartnerId, type ServiceId } from "@/registry";
+import { PARTNERS, SERVICES, SEVERITIES, resolvePartner, resolveService, resolveSeverity, type PartnerId, type ServiceId } from "@/registry";
 import type { ResolvedPartner } from "@/ingestion/resolution";
 import type { OutageRow } from "@/ingestion/writer";
 
@@ -125,7 +125,7 @@ export function correctionModal(input: CorrectionModalInput): unknown {
             placeholder: { type: "plain_text", text: "Select severity" },
             options: severityOptions,
           },
-          matchingOption(severityOptions, SEVERITIES.find((s) => s.displayName === severitySource)?.id),
+          matchingOption(severityOptions, resolveSeverityId(severitySource)),
         ),
       },
       {
@@ -157,6 +157,16 @@ function truncate(text: string, max: number): string {
 function selectOptionsFor(options: SelectOption[], ids: readonly string[]): SelectOption[] {
   const idSet = new Set(ids);
   return options.filter((option) => idSet.has(option.value));
+}
+
+/**
+ * Matches the current severity text against the registry rather than exact
+ * `displayName` equality, so a variant spelling (an ASCII hyphen instead of
+ * the registry's em dash, different casing, an alias) still prefills.
+ */
+function resolveSeverityId(severityText: string): string | undefined {
+  const result = resolveSeverity(severityText);
+  return result.status === "resolved" ? result.id : undefined;
 }
 
 function matchingOption(options: SelectOption[], id: string | undefined): SelectOption | undefined {
@@ -329,7 +339,7 @@ function resolveSelectedPartners(ids: string[], currentRows: OutageRow[]): Resol
     if (existingRow) {
       return { id: entry.id, displayName: entry.displayName, merchantId: existingRow.partnerId };
     }
-    // A7: no existing row for this partner — fall back to the registry's
+    // No existing row for this partner — fall back to the registry's
     // single merchantId, or null when there's more than one.
     const merchantId = entry.merchantIds.length === 1 ? String(entry.merchantIds[0]) : null;
     return { id: entry.id, displayName: entry.displayName, merchantId };

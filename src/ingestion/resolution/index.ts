@@ -13,7 +13,7 @@ import {
  * Pure resolution of an extracted PIR's merchant text and service ARIs into
  * registry partners and services, plus the cross-product rows the writer
  * will store. No I/O: everything here is a deterministic lookup against the
- * registry (spec §2 step 4, decisions E1–E4).
+ * registry (spec §2 step 4).
  */
 
 export type ResolvedPartner = {
@@ -35,12 +35,12 @@ export type CaptureRow = {
 
 const SERVICES_BY_ID = new Map(SERVICES.map((service) => [service.id, service]));
 
-/** Every standalone digit run (`\b\d+\b`), matching E2's deterministic scan. */
+/** Every standalone digit run (`\b\d+\b`), matching the deterministic scan below. */
 const DIGIT_RUN = /\b\d+\b/g;
 
 /**
  * Resolves a PIR's merchant text into pilot partners, a count of non-pilot
- * merchant IDs (E1 — ignored, never unresolved), and unresolved values (the
+ * merchant IDs (ignored, never unresolved), and unresolved values (the
  * derived rule: text present but the scan found no partner and no digit run
  * at all).
  */
@@ -54,7 +54,7 @@ export function resolveMerchantText(text: string | null): {
     return { partners: [], nonPilotIdCount: 0, unresolved: [] };
   }
 
-  // E2 ID scan: every standalone digit run is a merchant-ID candidate,
+  // ID scan: every standalone digit run is a merchant-ID candidate,
   // deduped. A run matching a registry merchantId resolves that partner
   // (with merchantId set to the run); an unmatched run is a non-pilot
   // merchant, counted but never unresolved.
@@ -71,7 +71,7 @@ export function resolveMerchantText(text: string | null): {
     }
   }
 
-  // E2 name scan: every registry partner displayName/alias found at word
+  // Name scan: every registry partner displayName/alias found at word
   // boundaries in the normalised text is a name match. A name match adds
   // the partner only when an ID didn't already add it.
   const normText = normalizeName(trimmed);
@@ -98,7 +98,7 @@ export function resolveMerchantText(text: string | null): {
       if (byId !== undefined) {
         return { id: partner.id, displayName: partner.displayName, merchantId: byId };
       }
-      // A7: a name-only match gets the registry's single merchantId as a
+      // A name-only match gets the registry's single merchantId as a
       // string, or null when the partner has more than one.
       const merchantId = partner.merchantIds.length === 1 ? String(partner.merchantIds[0]) : null;
       return { id: partner.id, displayName: partner.displayName, merchantId };
@@ -114,7 +114,7 @@ export function resolveMerchantText(text: string | null): {
 /**
  * Resolves each affected-service ARI (customfield_10399) to its registry
  * service. An ARI missing from the registry is skipped and flagged as an
- * unresolved value (D6); it does not fail the PIR. Both lists are deduped,
+ * unresolved value; it does not fail the PIR. Both lists are deduped,
  * keeping input order.
  */
 export function resolveServiceAris(aris: string[]): {
@@ -146,7 +146,7 @@ export function resolveServiceAris(aris: string[]): {
 }
 
 /**
- * Cross product of resolved partners and services (D2): one row per
+ * Cross product of resolved partners and services: one row per
  * (partner, service), identical apart from `affectedService`. Zero partners
  * or zero services yields no rows.
  */

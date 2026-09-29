@@ -72,6 +72,8 @@ The engine and feed are unchanged. An ESLint rule stops anything outside `src/in
 
 Unique on `(pir_key, partner, affected_service)`. A PIR affecting several services writes one row per (partner, service), identical apart from `affected_service`. Check constraints: `decision_type` is null if and only if `source = 'backfill'`; `reviewed_by` is set if and only if `decision_type = 'human_corrected'`.
 
+A historical backfill row that shares a PIR key with a PIR ingestion later captures or corrects is replaced by the pipeline's rows.
+
 **`sla_pir_reviews`**, keyed on `pir_key`: an ingestion log. Status (`received`, `skipped`, `captured`, `failed`), the extracted values (`incident_started`, `outage_minutes`, affected services, severity, `pir_url`) so the correction modal can prefill even when the PIR has zero rows, unresolved values typed as `{ kind: 'merchant' | 'service_ari', raw }`, the Slack channel and message timestamp, a version number incremented on every correction, error text, and received and updated timestamps. It makes a half-processed PIR visible instead of lost.
 
 **`sla_outage_corrections`**: one row per correction. `pir_key`, corrected by (Slack username), corrected at, the rows before and after (JSON), and the reason given.
@@ -132,6 +134,7 @@ Slack requires a response within three seconds, and the modal must open within t
 | Missing severity (`customfield_11646.value`) | `failed` |
 | Severity is L3 or L4 (`"L3 — Limited"`, `"L4 — Minor"`) | `skipped` — only L0–L2 PIRs are captured, with a reason |
 | Severity label is neither L0–L4 | `failed` — unrecognised severity |
+| PIR has no affected services | `failed`, engineering notified; fix the field in Jira and re-trigger the rule |
 | Database write fails | `failed`, engineering notified; no capture message posted |
 | Slack rejects the capture message (`ok: false`) | Rows are written and visible on the dashboard. Retrying the same channel would likely fail the same way, so the PIR is flagged in the health panel as captured without a message, with Slack's error |
 | Slack rejects the message edit after a correction | The correction is saved; logged, not retried |
@@ -142,7 +145,7 @@ Slack requires a response within three seconds, and the modal must open within t
 - Resolution: digit runs matched as merchant IDs, names and aliases matched at word boundaries, a non-pilot merchant ID ignored and counted, text with no partner and no digit run recorded as one unresolved value, and an empty field producing no partners and no unresolved value.
 - Severity: L3 and L4 are `skipped` with a reason; an unrecognised severity label is `failed`.
 - Signature verification, including a stale timestamp and a tampered body.
-- A correction that removes a partner deletes that partner's row.
+- A correction that removes a partner or a service deletes the matching rows.
 - Two corrections against the same version: the second is refused.
 - Every correction writes a before/after record.
 - Redelivery of an uncorrected PIR (version = 0) replaces its system-written rows from Jira, deleting rows Jira no longer lists; redelivery of a corrected PIR (version > 0) leaves its rows untouched and posts the Jira-changed note.

@@ -1,16 +1,14 @@
 import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const handleSlackInteraction = vi.fn();
-const defaultInteractionDeps = vi.fn();
+const runSlackInteraction = vi.fn();
 const afterMock = vi.fn();
 
 vi.mock("@/ingestion", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/ingestion")>();
   return {
     ...actual,
-    handleSlackInteraction: (...args: unknown[]) => handleSlackInteraction(...args),
-    defaultInteractionDeps: (...args: unknown[]) => defaultInteractionDeps(...args),
+    runSlackInteraction: (...args: unknown[]) => runSlackInteraction(...args),
   };
 });
 
@@ -79,7 +77,7 @@ describe("POST /api/slack/interactions", () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(handleSlackInteraction).not.toHaveBeenCalled();
+    expect(runSlackInteraction).not.toHaveBeenCalled();
   });
 
   it("rejects a request with no signature headers at all", async () => {
@@ -89,14 +87,12 @@ describe("POST /api/slack/interactions", () => {
     const response = await post({ rawBody, noHeaders: true });
 
     expect(response.status).toBe(401);
-    expect(handleSlackInteraction).not.toHaveBeenCalled();
+    expect(runSlackInteraction).not.toHaveBeenCalled();
   });
 
   it("accepts a request with a correctly computed signature, and passes the parsed payload through", async () => {
     process.env.SLACK_SIGNING_SECRET = "shh";
-    const deps = {};
-    defaultInteractionDeps.mockReturnValue(deps);
-    handleSlackInteraction.mockResolvedValue({ body: null });
+    runSlackInteraction.mockResolvedValue({ body: null });
 
     const rawBody = "payload=" + encodeURIComponent(JSON.stringify({ type: "shortcut" }));
     const timestamp = currentTimestamp();
@@ -105,8 +101,8 @@ describe("POST /api/slack/interactions", () => {
     const response = await post({ rawBody, timestamp, signature });
 
     expect(response.status).toBe(200);
-    expect(handleSlackInteraction).toHaveBeenCalledTimes(1);
-    expect(handleSlackInteraction).toHaveBeenCalledWith({ type: "shortcut" }, deps);
+    expect(runSlackInteraction).toHaveBeenCalledTimes(1);
+    expect(runSlackInteraction).toHaveBeenCalledWith({ type: "shortcut" });
   });
 
   it("rejects a request whose signature was computed over a different encoding of the body than was sent", async () => {
@@ -119,7 +115,7 @@ describe("POST /api/slack/interactions", () => {
     const response = await post({ rawBody: sentBody, timestamp, signature });
 
     expect(response.status).toBe(401);
-    expect(handleSlackInteraction).not.toHaveBeenCalled();
+    expect(runSlackInteraction).not.toHaveBeenCalled();
   });
 
   it("returns 400 when the payload field is missing", async () => {
@@ -131,7 +127,7 @@ describe("POST /api/slack/interactions", () => {
     const response = await post({ rawBody, timestamp, signature });
 
     expect(response.status).toBe(400);
-    expect(handleSlackInteraction).not.toHaveBeenCalled();
+    expect(runSlackInteraction).not.toHaveBeenCalled();
   });
 
   it("returns 400 when the payload field is not valid JSON", async () => {
@@ -143,14 +139,12 @@ describe("POST /api/slack/interactions", () => {
     const response = await post({ rawBody, timestamp, signature });
 
     expect(response.status).toBe(400);
-    expect(handleSlackInteraction).not.toHaveBeenCalled();
+    expect(runSlackInteraction).not.toHaveBeenCalled();
   });
 
-  it("returns 500 when defaultInteractionDeps throws, without leaking the message", async () => {
+  it("returns 500 when runSlackInteraction throws (ingestion misconfigured), without leaking the message", async () => {
     process.env.SLACK_SIGNING_SECRET = "shh";
-    defaultInteractionDeps.mockImplementation(() => {
-      throw new Error("SLACK_BOT_TOKEN is required");
-    });
+    runSlackInteraction.mockRejectedValue(new Error("SLACK_BOT_TOKEN is required"));
 
     const rawBody = "payload=" + encodeURIComponent(JSON.stringify({ type: "shortcut" }));
     const timestamp = currentTimestamp();
@@ -161,15 +155,12 @@ describe("POST /api/slack/interactions", () => {
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body).toEqual({ error: "ingestion is not configured" });
-    expect(handleSlackInteraction).not.toHaveBeenCalled();
   });
 
   it("a submission's JSON body is returned and its followUp is registered through after()", async () => {
     process.env.SLACK_SIGNING_SECRET = "shh";
-    const deps = {};
-    defaultInteractionDeps.mockReturnValue(deps);
     const followUp = vi.fn().mockResolvedValue(undefined);
-    handleSlackInteraction.mockResolvedValue({ body: { response_action: "clear" }, followUp });
+    runSlackInteraction.mockResolvedValue({ body: { response_action: "clear" }, followUp });
 
     const rawBody = "payload=" + encodeURIComponent(JSON.stringify({ type: "view_submission" }));
     const timestamp = currentTimestamp();
@@ -187,8 +178,7 @@ describe("POST /api/slack/interactions", () => {
 
   it("returns an empty 200 when the handler's body is null, and does not call after() without a followUp", async () => {
     process.env.SLACK_SIGNING_SECRET = "shh";
-    defaultInteractionDeps.mockReturnValue({});
-    handleSlackInteraction.mockResolvedValue({ body: null });
+    runSlackInteraction.mockResolvedValue({ body: null });
 
     const rawBody = "payload=" + encodeURIComponent(JSON.stringify({ type: "block_actions" }));
     const timestamp = currentTimestamp();

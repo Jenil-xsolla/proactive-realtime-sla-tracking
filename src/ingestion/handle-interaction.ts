@@ -36,7 +36,7 @@ import { openView, updateMessage, type OpenViewResult, type UpdateMessageResult 
  * pattern in handle-pir.ts.
  *
  * `chat.update` and the alert trigger run in the caller's `after()`
- * (design §3, D7), not before responding — so a successful correction
+ * (design §3), not before responding — so a successful correction
  * returns a `followUp` the route schedules there. `followUp` itself never
  * throws.
  */
@@ -79,8 +79,21 @@ const SAVE_FAILED_ERROR = {
   errors: { partners: "Could not save the correction; try again." },
 } as const;
 
+/** See handle-pir.ts's describeError: Drizzle 0.45 wraps DB errors in
+ * DrizzleQueryError, whose `.message` is the SQL text, not the reason;
+ * the reason lives on `.cause`. Capped at the same length for consistency. */
+const MAX_ERROR_CHARS = 500;
+
+function truncateError(message: string): string {
+  return message.length > MAX_ERROR_CHARS ? `${message.slice(0, MAX_ERROR_CHARS)}…` : message;
+}
+
 function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    const message = error.cause instanceof Error ? error.cause.message : error.message;
+    return truncateError(message);
+  }
+  return truncateError(String(error));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -253,7 +266,7 @@ function toCaptureRow(pirKey: string, fallbackPirUrl: string, row: OutageRow): C
 }
 
 /**
- * Builds the applied correction's `followUp` (spec §3 step 4, D7): edits
+ * Builds the applied correction's `followUp` (spec §3 step 4): edits
  * the capture message and triggers the alert run after the response has
  * gone out. Re-reads the PIR's current rows, review and latest correction
  * at the moment it actually runs, rather than closing over the snapshot
@@ -350,4 +363,18 @@ export function defaultInteractionDeps(env: Record<string, string | undefined> =
       console.error(msg);
     },
   };
+}
+
+/**
+ * The public entry point for the `/api/slack/interactions` route: builds
+ * the default deps and runs the flow, mirroring `runPirApproved` in
+ * handle-pir.ts. This, not `defaultInteractionDeps`, is what
+ * `src/ingestion/index.ts` exports, so nothing outside `src/ingestion` ever
+ * holds an `InteractionDeps` (and therefore the ingestion database client)
+ * directly. Throws the same config error `defaultInteractionDeps` throws;
+ * the route catches it.
+ */
+export async function runSlackInteraction(payload: unknown): Promise<InteractionResult> {
+  const deps = defaultInteractionDeps();
+  return handleSlackInteraction(payload, deps);
 }

@@ -141,6 +141,21 @@ describe("postMessage", () => {
 
     expect(result).toEqual({ ok: false, error: "channel_not_found: Slack has no channel with this id." });
   });
+
+  it("explains not_in_channel neutrally — a capture message is one-shot, so it must not claim a retry will happen on its own", async () => {
+    const result = await postMessage({
+      token: TOKEN,
+      channel: "C1",
+      text: "hello",
+      fetch: async () => jsonResponse({ ok: false, error: "not_in_channel" }),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error:
+        "not_in_channel: the bot is not a member of this channel. Invite it, then retry. The bot needs the chat:write scope.",
+    });
+  });
 });
 
 describe("updateMessage", () => {

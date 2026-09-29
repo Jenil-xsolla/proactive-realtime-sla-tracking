@@ -4,24 +4,17 @@
  * and the ingestion database client are intentionally not re-exported,
  * and ESLint (see eslint.config.mjs) enforces that only code inside
  * src/ingestion/** may reach them directly.
+ *
+ * `runPirApproved`/`runSlackInteraction` are the only entry points the two
+ * routes use — not the default-deps builders or the flow functions they
+ * call, which hand a deps object (and therefore the ingestion database
+ * client) to the caller. Only symbols something outside src/ingestion
+ * actually imports are exported here; everything else is reached through
+ * the internal module path, which ESLint allows for tests.
  */
-export { PIR_FIELDS, INCIDENT_FIELDS, fetchIssue } from "./jira/client";
-export type { JiraFetchResult } from "./jira/client";
-export { readPir, readIncidentStart } from "./jira/extract";
-export type { PirRead, PirReadValue } from "./jira/extract";
-export {
-  resolveMerchantText,
-  resolveServiceAris,
-  buildCaptureRows,
-} from "./resolution";
-export type { ResolvedPartner, CaptureRow } from "./resolution";
 export { verifySlackRequest } from "./notify/verify";
 export type { SlackVerifyResult } from "./notify/verify";
 export { triggerAlertRun } from "./notify/trigger-alerts";
 export type { TriggerAlertRunResult } from "./notify/trigger-alerts";
-export { defaultPirDeps, handlePirApproved } from "./handle-pir";
-export type { PirDeps, PirFetchIssue, PirOutcome, PirPostMessage, PirUpdateMessage } from "./handle-pir";
-export { defaultInteractionDeps, handleSlackInteraction } from "./handle-interaction";
-export type { InteractionDeps, InteractionOpenView, InteractionResult, InteractionTriggerAlerts, InteractionUpdateMessage } from "./handle-interaction";
-export { correctionModal, parseCorrectionSubmission } from "./notify/correction-modal";
-export type { CorrectionModalInput, CorrectionModalReview, ParsedCorrection } from "./notify/correction-modal";
+export { runPirApproved } from "./handle-pir";
+export { runSlackInteraction } from "./handle-interaction";

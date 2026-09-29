@@ -1,11 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const handlePirApproved = vi.fn();
-const defaultPirDeps = vi.fn();
+const runPirApproved = vi.fn();
 
 vi.mock("@/ingestion", () => ({
-  handlePirApproved: (...args: unknown[]) => handlePirApproved(...args),
-  defaultPirDeps: (...args: unknown[]) => defaultPirDeps(...args),
+  runPirApproved: (...args: unknown[]) => runPirApproved(...args),
 }));
 
 import * as route from "@/app/api/ingest/pir-approved/route";
@@ -49,7 +47,7 @@ describe("POST /api/ingest/pir-approved", () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(handlePirApproved).not.toHaveBeenCalled();
+    expect(runPirApproved).not.toHaveBeenCalled();
   });
 
   it("rejects a request with the wrong secret", async () => {
@@ -58,7 +56,7 @@ describe("POST /api/ingest/pir-approved", () => {
     const response = await post({ secret: "wrong", body: JSON.stringify({ issueKey: "GTO-1" }) });
 
     expect(response.status).toBe(401);
-    expect(handlePirApproved).not.toHaveBeenCalled();
+    expect(runPirApproved).not.toHaveBeenCalled();
   });
 
   it("rejects every request when JIRA_WEBHOOK_SECRET is unset, even with a header present", async () => {
@@ -67,13 +65,12 @@ describe("POST /api/ingest/pir-approved", () => {
     const response = await post({ secret: "anything", body: JSON.stringify({ issueKey: "GTO-1" }) });
 
     expect(response.status).toBe(401);
-    expect(handlePirApproved).not.toHaveBeenCalled();
+    expect(runPirApproved).not.toHaveBeenCalled();
   });
 
   it("accepts the header regardless of its case", async () => {
     process.env.JIRA_WEBHOOK_SECRET = "shh";
-    defaultPirDeps.mockReturnValue({});
-    handlePirApproved.mockResolvedValue({ kind: "captured", rowCount: 1, messagePosted: true });
+    runPirApproved.mockResolvedValue({ kind: "captured", rowCount: 1, messagePosted: true });
 
     const response = await post({
       headerName: "Jira-Webhook-Token",
@@ -90,7 +87,7 @@ describe("POST /api/ingest/pir-approved", () => {
     const response = await post({ secret: "shh", body: "{" });
 
     expect(response.status).toBe(400);
-    expect(handlePirApproved).not.toHaveBeenCalled();
+    expect(runPirApproved).not.toHaveBeenCalled();
   });
 
   it("rejects an array body", async () => {
@@ -99,7 +96,7 @@ describe("POST /api/ingest/pir-approved", () => {
     const response = await post({ secret: "shh", body: JSON.stringify(["GTO-1"]) });
 
     expect(response.status).toBe(400);
-    expect(handlePirApproved).not.toHaveBeenCalled();
+    expect(runPirApproved).not.toHaveBeenCalled();
   });
 
   it("rejects a body with a missing issueKey", async () => {
@@ -108,7 +105,7 @@ describe("POST /api/ingest/pir-approved", () => {
     const response = await post({ secret: "shh", body: JSON.stringify({}) });
 
     expect(response.status).toBe(400);
-    expect(handlePirApproved).not.toHaveBeenCalled();
+    expect(runPirApproved).not.toHaveBeenCalled();
   });
 
   it("rejects a body with a blank issueKey", async () => {
@@ -117,41 +114,35 @@ describe("POST /api/ingest/pir-approved", () => {
     const response = await post({ secret: "shh", body: JSON.stringify({ issueKey: "   " }) });
 
     expect(response.status).toBe(400);
-    expect(handlePirApproved).not.toHaveBeenCalled();
+    expect(runPirApproved).not.toHaveBeenCalled();
   });
 
-  it("returns 500 when defaultPirDeps throws, without leaking the message", async () => {
+  it("returns 500 when runPirApproved throws (ingestion misconfigured), without leaking the message", async () => {
     process.env.JIRA_WEBHOOK_SECRET = "shh";
-    defaultPirDeps.mockImplementation(() => {
-      throw new Error("JIRA_BASE_URL is required");
-    });
+    runPirApproved.mockRejectedValue(new Error("JIRA_BASE_URL is required"));
 
     const response = await post({ secret: "shh", body: JSON.stringify({ issueKey: "GTO-1" }) });
 
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body).toEqual({ error: "ingestion is not configured" });
-    expect(handlePirApproved).not.toHaveBeenCalled();
   });
 
-  it("returns 200 with the outcome for a captured PIR, calling handlePirApproved with the trimmed key", async () => {
+  it("returns 200 with the outcome for a captured PIR, calling runPirApproved with the trimmed key", async () => {
     process.env.JIRA_WEBHOOK_SECRET = "shh";
-    const deps = {};
-    defaultPirDeps.mockReturnValue(deps);
-    handlePirApproved.mockResolvedValue({ kind: "captured", rowCount: 2, messagePosted: true });
+    runPirApproved.mockResolvedValue({ kind: "captured", rowCount: 2, messagePosted: true });
 
     const response = await post({ secret: "shh", body: JSON.stringify({ issueKey: "  GTO-1  " }) });
 
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toEqual({ issueKey: "GTO-1", outcome: "captured" });
-    expect(handlePirApproved).toHaveBeenCalledWith("GTO-1", deps);
+    expect(runPirApproved).toHaveBeenCalledWith("GTO-1");
   });
 
   it("returns 200 with the outcome for a failed PIR, per spec (Jira Automation does not retry)", async () => {
     process.env.JIRA_WEBHOOK_SECRET = "shh";
-    defaultPirDeps.mockReturnValue({});
-    handlePirApproved.mockResolvedValue({ kind: "failed", error: "boom" });
+    runPirApproved.mockResolvedValue({ kind: "failed", error: "boom" });
 
     const response = await post({ secret: "shh", body: JSON.stringify({ issueKey: "GTO-1" }) });
 
@@ -162,8 +153,7 @@ describe("POST /api/ingest/pir-approved", () => {
 
   it("returns 200 with the outcome for a receipt_failed PIR", async () => {
     process.env.JIRA_WEBHOOK_SECRET = "shh";
-    defaultPirDeps.mockReturnValue({});
-    handlePirApproved.mockResolvedValue({ kind: "receipt_failed", error: "db down" });
+    runPirApproved.mockResolvedValue({ kind: "receipt_failed", error: "db down" });
 
     const response = await post({ secret: "shh", body: JSON.stringify({ issueKey: "GTO-1" }) });
 
@@ -174,8 +164,7 @@ describe("POST /api/ingest/pir-approved", () => {
 
   it("carries Cache-Control: no-store on every response", async () => {
     process.env.JIRA_WEBHOOK_SECRET = "shh";
-    defaultPirDeps.mockReturnValue({});
-    handlePirApproved.mockResolvedValue({ kind: "captured", rowCount: 1, messagePosted: true });
+    runPirApproved.mockResolvedValue({ kind: "captured", rowCount: 1, messagePosted: true });
 
     const unauthorized = await post({ body: JSON.stringify({ issueKey: "GTO-1" }) });
     const badBody = await post({ secret: "shh", body: "{" });

@@ -12,13 +12,21 @@ silently exposing the wrong routes.
 
 ## Build
 
-Build one image from this repo and push it to your registry (Artifact Registry). Deploy that
+Build one image from this repo's `Dockerfile` (multi-stage: `pnpm install --frozen-lockfile`,
+`pnpm build` against `next.config.ts`'s `output: "standalone"`, then a minimal runtime stage
+that runs `node server.js` as a non-root user on port 8080) and push it to your registry
+(Artifact Registry). `gcloud builds submit` now works because the repo has a `Dockerfile` —
+without one, Cloud Build's buildpacks path would have to guess how to run this app. Deploy that
 same image twice, below, with different `--service`, ingress and env var settings. Do not build
 per-service images — the two services must run identical code.
 
 ```sh
 gcloud builds submit --tag <REGION>-docker.pkg.dev/<PROJECT>/<REPO>/sla-app:<TAG>
 ```
+
+The runtime image does not include devDependencies (in particular `tsx`, which
+`pnpm db:migrate` needs — see **Database** below), so migrations run from a full checkout or CI,
+never from the built image.
 
 ## Service: `sla-dashboard`
 
@@ -103,8 +111,8 @@ gcloud run services add-iam-policy-binding sla-dashboard \
 
 `--network` and `--subnet` are the Direct VPC egress flags — without them, `--vpc-egress` has no
 network to attach to and the deploy is rejected. `--no-cpu-throttling` is what makes CPU always
-allocated (the flag that matters for D7); `--cpu-boost` is a separate, optional startup-latency
-optimization and is not required for correctness here.
+allocated (the flag that matters for keeping `after()` work running past the response); `--cpu-boost`
+is a separate, optional startup-latency optimization and is not required for correctness here.
 
 ## Secrets
 
@@ -198,7 +206,9 @@ On PIR approval, configure a "Send web request" action:
 ## Local development
 
 Set `SERVICE_ROLE=dashboard` or `SERVICE_ROLE=ingestion` in `.env` before running `pnpm dev` —
-`src/instrumentation.ts` reads it at startup and the app refuses to start without a valid value.
+`src/instrumentation.ts` reads it and the app refuses to run without a valid value. `pnpm dev`
+does not prepare eagerly, so `register()` only runs (and can only exit the process) on the first
+request, not at the moment `next dev` starts.
 
 ## Cutover checklist
 

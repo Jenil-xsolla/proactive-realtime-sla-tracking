@@ -108,11 +108,20 @@ export function captureMessage(input: CaptureMessageInput): SlackMessage {
 
 export type FailureNoticeInput = { pirKey: string; pirUrl: string; error: string };
 
+/** Caps how much of a raw error string a Slack notice will render, independent
+ * of any truncation the caller already did — a defense against a caller that
+ * passes an untruncated string straight through (e.g. a raw Jira error). */
+const MAX_ERROR_CHARS = 500;
+
+function truncateError(error: string): string {
+  return error.length > MAX_ERROR_CHARS ? `${error.slice(0, MAX_ERROR_CHARS)}…` : error;
+}
+
 /** Short notice for a PIR that failed to capture (spec §4 failure table). No button. */
 export function failureNotice(input: FailureNoticeInput): SlackMessage {
   const text = `${input.pirKey} failed to capture.`;
   const blocks: SlackBlock[] = [
-    section(`${text}\n${link(input.pirUrl, input.pirKey)}\n${escapeMrkdwn(input.error)}`),
+    section(`${text}\n${link(input.pirUrl, input.pirKey)}\n${escapeMrkdwn(truncateError(input.error))}`),
   ];
   return { text, blocks };
 }

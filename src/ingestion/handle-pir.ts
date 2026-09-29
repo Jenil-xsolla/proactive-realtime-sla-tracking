@@ -75,8 +75,21 @@ function buildPirUrl(baseUrl: string, pirKey: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/browse/${pirKey}`;
 }
 
+/** Drizzle 0.45 wraps DB errors in DrizzleQueryError, whose `.message` is the
+ * SQL text; the useful reason lives on `.cause`. Capped so a giant SQL blob
+ * (or any other long error) never blows Slack's per-section limit downstream. */
+const MAX_ERROR_CHARS = 500;
+
+function truncateError(message: string): string {
+  return message.length > MAX_ERROR_CHARS ? `${message.slice(0, MAX_ERROR_CHARS)}…` : message;
+}
+
 function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    const message = error.cause instanceof Error ? error.cause.message : error.message;
+    return truncateError(message);
+  }
+  return truncateError(String(error));
 }
 
 export async function handlePirApproved(issueKey: string, deps: PirDeps): Promise<PirOutcome> {
@@ -214,11 +227,17 @@ async function handleSkip(
   now: Date,
   log: (msg: string) => void,
 ): Promise<PirOutcome> {
-  let alreadyCaptured = false;
+  let alreadyCaptured: boolean;
   try {
     alreadyCaptured = await wasCaptured(deps.db, issueKey);
   } catch (error) {
-    log(`wasCaptured failed for ${issueKey}: ${describeError(error)}`);
+    // Whether this PIR was previously captured is now unknown, so we cannot
+    // safely decide between "leave rows untouched" and "mark skipped" —
+    // continuing down either path could silently lose a capture. Route
+    // through fail() instead of falling through to markSkipped.
+    const message = describeError(error);
+    log(`wasCaptured failed for ${issueKey}: ${message}`);
+    return fail(deps, issueKey, buildPirUrl(deps.config.jiraBaseUrl, issueKey), message, now, log);
   }
 
   if (alreadyCaptured) {
@@ -247,7 +266,7 @@ async function handleSkip(
 }
 
 /**
- * Posts or edits the capture message (spec §2 step 6, A9): edits the saved
+ * Posts or edits the capture message (spec §2 step 6): edits the saved
  * message in place when one already exists for this PIR, otherwise posts a
  * new one and saves its reference. A Slack rejection, or a thrown error, is
  * recorded as `slack_error`; rows stay written either way (spec §4). A
@@ -410,4 +429,17 @@ export function defaultPirDeps(env: Record<string, string | undefined> = process
       console.error(msg);
     },
   };
+}
+
+/**
+ * The public entry point for the `/api/ingest/pir-approved` route: builds
+ * the default deps and runs the flow. This, not `defaultPirDeps`, is what
+ * `src/ingestion/index.ts` exports — a `PirDeps` carries the ingestion
+ * database client (`db`), and nothing outside `src/ingestion` should hold
+ * that directly. Throws the same config error `defaultPirDeps` throws; the
+ * route catches it.
+ */
+export async function runPirApproved(issueKey: string): Promise<PirOutcome> {
+  const deps = defaultPirDeps();
+  return handlePirApproved(issueKey, deps);
 }
