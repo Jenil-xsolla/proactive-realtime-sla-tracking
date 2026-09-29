@@ -11,6 +11,7 @@ export function systemFeed(rows: TechnicalRow[], asOf = "2026-09-15T12:00:00.000
     role: "system",
     health: emptyHealth(),
     rows,
+    ingestion: { status: "ok", counts: { failed: 0, unresolved: 0, withoutMessage: 0 }, failed: [], unresolved: [], withoutMessage: [] },
   };
 }
 

@@ -15,6 +15,34 @@
       "when": 1790180000000,
       "tag": "0001_sla_alert_state_partner_slug",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790616243602,
+      "tag": "0002_sla_outages",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790617007577,
+      "tag": "0003_pir_reviews_and_corrections",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790617396037,
+      "tag": "0004_service_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790695513982,
+      "tag": "0005_corrections_pir_key_index",
+      "breakpoints": true
     }
   ]
 }

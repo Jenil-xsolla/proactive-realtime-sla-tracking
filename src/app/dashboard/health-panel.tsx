@@ -1,8 +1,9 @@
 import { Card } from "@/ui";
-import { ZERO_COVERAGE_NOTE } from "./copy";
-import type { HealthView } from "./model";
+import { INGESTION_FAILED_LABEL, INGESTION_HEALTH_UNAVAILABLE, INGESTION_UNRESOLVED_LABEL, INGESTION_WITHOUT_MESSAGE_LABEL, ZERO_COVERAGE_NOTE } from "./copy";
+import type { HealthView, IngestionRow } from "./model";
 
 export function HealthPanel({ health }: { health: HealthView }) {
+  const ingestion = health.ingestion;
   return (
     <section aria-labelledby="data-health-heading">
       <Card>
@@ -33,7 +34,31 @@ export function HealthPanel({ health }: { health: HealthView }) {
               detail={ZERO_COVERAGE_NOTE}
               warn={false}
             />
+            {ingestion.status === "ok" ? (
+              <>
+                <Metric
+                  label={INGESTION_FAILED_LABEL}
+                  value={String(ingestion.failed.count)}
+                  warn={ingestion.failed.count > 0}
+                />
+                <Metric
+                  label={INGESTION_UNRESOLVED_LABEL}
+                  value={String(ingestion.unresolved.count)}
+                  warn={ingestion.unresolved.count > 0}
+                />
+                <Metric
+                  label={INGESTION_WITHOUT_MESSAGE_LABEL}
+                  value={String(ingestion.withoutMessage.count)}
+                  warn={ingestion.withoutMessage.count > 0}
+                />
+              </>
+            ) : null}
           </div>
+          {ingestion.status === "error" ? (
+            <p className="text-sm text-danger" role="alert">
+              {INGESTION_HEALTH_UNAVAILABLE}
+            </p>
+          ) : null}
           {health.reasons.length > 0 ? (
             <ul className="flex flex-col gap-1">
               {health.reasons.map((reason) => (
@@ -46,6 +71,13 @@ export function HealthPanel({ health }: { health: HealthView }) {
           <NameList label="Unresolved partner names" names={health.unresolvedPartnerNames} />
           <NameList label="Unmatched service names" names={health.unmatchedServiceNames} />
           <NameList label="Partners with no attributed rows" names={health.partnersWithNoRows} />
+          {ingestion.status === "ok" ? (
+            <>
+              <IngestionList label={INGESTION_FAILED_LABEL} rows={ingestion.failed.rows} />
+              <IngestionList label={INGESTION_UNRESOLVED_LABEL} rows={ingestion.unresolved.rows} />
+              <IngestionList label={INGESTION_WITHOUT_MESSAGE_LABEL} rows={ingestion.withoutMessage.rows} />
+            </>
+          ) : null}
         </div>
       </Card>
     </section>
@@ -83,6 +115,37 @@ function NameList({ label, names }: { label: string; names: readonly string[] })
           {names.map((name) => (
             <li key={name} className="text-sm text-foreground">
               {name}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function IngestionList({ label, rows }: { label: string; rows: readonly IngestionRow[] }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-foreground">None</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {rows.map((row) => (
+            <li key={row.pirKey} className="text-sm text-foreground">
+              {row.href === null ? (
+                <span className="font-mono">{row.pirKey}</span>
+              ) : (
+                <a
+                  href={row.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-primary underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {row.pirKey}
+                </a>
+              )}
+              {row.detail ? <span className="text-muted-foreground"> — {row.detail}</span> : null}
             </li>
           ))}
         </ul>

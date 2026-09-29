@@ -9,6 +9,11 @@ export type PartnerEntry = CanonicalEntry & {
   merchantIds: readonly number[];
 };
 
+export type ServiceEntry = CanonicalEntry & {
+  /** Bare lowercase Jira ARI UUIDs (customfield_10399) that identify this service. */
+  aris: readonly string[];
+};
+
 export type ResolveResult<Id extends string> =
   | { status: "resolved"; id: Id }
   | { status: "unresolved"; raw: string };

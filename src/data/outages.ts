@@ -25,6 +25,15 @@ export const UNUSABLE_REASONS = [
 
 export type UnusableReason = (typeof UNUSABLE_REASONS)[number];
 
+const OUTAGE_PROVENANCES = ["pipeline", "backfill"] as const;
+
+/** sla_outages.source: 'pipeline' (written by ingestion) or 'backfill' (imported history). */
+export type OutageProvenance = (typeof OUTAGE_PROVENANCES)[number];
+
+function parseSource(value: string): OutageProvenance | null {
+  return (OUTAGE_PROVENANCES as readonly string[]).includes(value) ? (value as OutageProvenance) : null;
+}
+
 /**
  * A row as node-postgres / Drizzle returns it.
  * outageMinutes and partnerId are still strings.
@@ -39,6 +48,8 @@ export type OutageSourceRow = {
   affectedService: string | null;
   outageMinutes: string | null;
   severity: string | null;
+  /** Raw sla_outages.source. */
+  source: string;
   reviewedBy: string | null;
   decisionType: string | null;
   reviewedAt: Date | null;
@@ -57,6 +68,8 @@ export type UsableOutage = {
   incidentStarted: Date;
   outageMinutes: number;
   severity: SeverityId;
+  /** Parsed sla_outages.source. Null when the value is neither pipeline nor backfill. */
+  source: OutageProvenance | null;
   reviewedBy: string | null;
   decisionType: string | null;
   reviewedAt: Date | null;
@@ -195,6 +208,7 @@ export function partitionOutages(rows: readonly OutageSourceRow[]): OutagePartit
       incidentStarted,
       outageMinutes: minutes.minutes,
       severity: severity.id,
+      source: parseSource(row.source),
       reviewedBy: row.reviewedBy,
       decisionType: row.decisionType,
       reviewedAt: row.reviewedAt,

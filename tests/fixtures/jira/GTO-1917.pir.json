@@ -1,0 +1,18 @@
+{
+  "key": "GTO-1917",
+  "fields": {
+    "summary": "PIR — GTO-1916: Whoisoncall bot stopped working",
+    "created": "2026-09-14T18:32:59.071+0500",
+    "customfield_31331": 680,
+    "customfield_11646": { "value": "L2 — Major", "id": "36918" },
+    "customfield_10399": [
+      { "id": "ari:cloud:graph::service/6184b75d-f203-4004-be12-5899d49497d2/0ba99b24-d00a-11eb-a1f5-0abe3f4a6601" },
+      { "id": "ari:cloud:graph::service/6184b75d-f203-4004-be12-5899d49497d2/2201284c-d00a-11eb-8ed1-0abe3f4a6601" }
+    ],
+    "customfield_13920": null,
+    "issuelinks": [
+      { "id": "1085598", "type": { "id": "11031", "name": "Post-Incident Reviews" }, "outwardIssue": { "key": "GTO-1916" } },
+      { "id": "1085972", "type": { "id": "11904", "name": "Action item" }, "outwardIssue": { "key": "SYSADM-55542" } }
+    ]
+  }
+}

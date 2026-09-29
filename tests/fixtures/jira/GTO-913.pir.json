@@ -1,0 +1,16 @@
+{
+  "key": "GTO-913",
+  "fields": {
+    "summary": "PIR — GTO-901: [Payment] Payment Transactions Showing as Canceled Despite Successful Merchant Transactions because of unexpected changes on AliPay side",
+    "created": "2026-08-18T14:01:25.076+0500",
+    "customfield_31331": 291,
+    "customfield_11646": { "value": "L4 — Minor", "id": "36920" },
+    "customfield_10399": [
+      { "id": "ari:cloud:graph::service/6184b75d-f203-4004-be12-5899d49497d2/271a0cee-45d2-11f0-81c7-122fa60ab53d" }
+    ],
+    "customfield_13920": null,
+    "issuelinks": [
+      { "id": "1066015", "type": { "id": "10006", "name": "Problem/Incident" }, "inwardIssue": { "key": "GTO-901" } }
+    ]
+  }
+}

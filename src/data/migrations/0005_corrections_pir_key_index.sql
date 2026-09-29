@@ -1,0 +1,1 @@
+CREATE INDEX "sla_outage_corrections_pir_key_idx" ON "sla_outage_corrections" USING btree ("pir_key");

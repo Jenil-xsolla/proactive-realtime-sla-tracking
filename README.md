@@ -12,7 +12,7 @@ contract and our Jira incidents — and warn us **before** a breach happens, not
 
 ## Architecture
 
-![Proactive Real-Time SLA Tracking — component view](docs/sla-architecture-v2.svg)
+![Proactive Real-Time SLA Tracking — component view](docs/sla-architecture-v2.png)
 
 Data flows in one direction, from raw sources to a single evaluated record that every view and alert reads
 from — so the business and engineering pictures can never disagree.
@@ -125,6 +125,16 @@ Automatic notifications while there's still time to act:
 
 Example — Slack to the CSM: *"Partner A trending to miss 99.9% in ~6 days — 10% credit at risk,"* not forty
 repeats of "availability degraded."
+
+## Services and ingestion
+
+The app is built once and deployed as two Cloud Run services, selected by `SERVICE_ROLE`: `sla-dashboard`
+(internal, serves the dashboard and the alert-run endpoint) and `sla-ingestion` (public, serves only the Jira
+webhook and Slack interactions). A Jira Automation webhook posts each approved PIR to `sla-ingestion`, which
+resolves partners and services through the registry and writes outage rows directly — no separate workflow
+tool in between. Every capture and correction posts to Slack and triggers an alert run on `sla-dashboard`. See
+`specs/2026-09-25-ingestion-in-app-design.md` for the full design and `docs/deploy.md` for running both
+services.
 
 ## Phase 1 partners
 

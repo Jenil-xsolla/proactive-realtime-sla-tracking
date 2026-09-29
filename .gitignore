@@ -34,11 +34,13 @@ yarn-error.log*
 .env*
 !.env.example
 
-# local Cursor state, including rules
+# Agentic AI state
 .cursor/*
+.claude/*
+CLAUDE.md
+specs/plans/*
+.superpowers/*
 
-# vercel
-.vercel
 
 # typescript
 *.tsbuildinfo
