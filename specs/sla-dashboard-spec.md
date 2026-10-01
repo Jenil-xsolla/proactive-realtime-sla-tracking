@@ -38,7 +38,7 @@ Slice one is independently useful and shippable. The business view follows as so
 
 **What exists already.** The app's engine, feed, technical view and alerting. A test Postgres database. Production is PostgreSQL on GCP (Cloud SQL), requested through the Production Postgres ADR.
 
-**Ingestion is part of the app.** Ingestion lives in `src/ingestion/`: it triggers on PIR approval in Jira, resolves partners by registry lookup with no model, writes immediately, and posts each capture to Slack with a Correct button. Idempotency key is `(pir_key, partner, affected_service)`: a PIR affecting several services writes one row per (partner, service).
+**Ingestion is part of the app.** Until 2026-09-28 an n8n workflow wrote `sla_outages`, using a language model for partner attribution and a Slack approval step before writing. n8n cloud is no longer available at Xsolla, so ingestion now lives in `src/ingestion/`: it triggers on PIR approval in Jira, resolves partners by registry lookup with no model, writes immediately, and posts each capture to Slack with a Correct button. Idempotency key is still `(pir_key, partner, affected_service)`.
 
 **What is being added.** Historical incident data from `2026-01-01`, imported from a maintained spreadsheet. No availability data exists before that date.
 
@@ -114,9 +114,9 @@ Two things trigger an alert run, and neither holds SLA logic: Cloud Scheduler at
 
 ### AD-8 — Ingestion is in the app, write first, correct any time
 
-The affected-merchants field holds partner names or merchant IDs, so attribution is a registry lookup, merchant ID first. No model is involved and nothing is guessed: an unmatched non-numeric value is flagged and produces no row, and a non-pilot merchant ID is ignored and counted.
+The affected-merchants field holds partner names or merchant IDs, so attribution is a registry lookup, merchant ID first. No model is involved and nothing is guessed: an unmatched value is flagged and produces no row.
 
-Rows are written immediately as `system_written` and posted to Slack channel `C0BUT8U637Y`. A Correct button stays usable indefinitely. A correction replaces the PIR's rows as a set, marks them `human_corrected` with the reviewer's name, and is recorded with before and after values. There is no review step before the write: attribution is a deterministic lookup, so nothing needs approving first.
+Rows are written immediately as `system_written` and posted to Slack channel `C0BUT8U637Y`. A Correct button stays usable indefinitely. A correction replaces the PIR's rows as a set, marks them `human_corrected` with the reviewer's name, and is recorded with before and after values. This replaced the earlier approve-before-write step, which only made sense while a model was proposing attributions.
 
 Full design: the companion document.
 
@@ -172,7 +172,7 @@ Created by the app's migrations. The dashboard service reads it; only the ingest
 | Column             | Type        | Notes                                                                                                                                                              |
 | ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `id`               | int         | surrogate key                                                                                                                                                      |
-| `pir_key`          | text        | e.g. `GTO-543`; part of the idempotency key `(pir_key, partner, affected_service)`                                                                                 |
+| `pir_key`          | text        | e.g. `GTO-543`; part of the idempotency key                                                                                                                        |
 | `partner`          | text        | resolved partner display name; a display convenience that can drift                                                                                               |
 | `partner_id`       | **text**    | **already present.** The external *merchant id* (e.g. `"506855"`), not a FK. Authoritative partner identity. String, so parse at the edge |
 | `incident_started` | timestamptz | UTC                                                                                                                                                                |
@@ -187,7 +187,7 @@ Created by the app's migrations. The dashboard service reads it; only the ingest
 | `source`           | text        | `pipeline` or `backfill` |
 
 
-**`sla_outages` has no `ai_reasoning` column.** Attribution is a registry lookup and produces no free-text reasoning. Nothing in the app refers to it.
+**`ai_reasoning` was dropped on 2026-09-28** along with the language model that produced it. Nothing in the app referred to it.
 
 **Not to be confused with the engine's** `StatusReason`**.** That is computed by the engine, explains why a scope holds its status, and is unrelated to the `reason` column.
 
@@ -199,13 +199,13 @@ Created by the app's migrations. The dashboard service reads it; only the ingest
 
 ### 5.1 Ownership
 
-The repo owns the whole schema through its migrations: `sla_outages`, `sla_alert_state`, `sla_pir_reviews`, `sla_outage_corrections` and `sla_contract_terms`.
+The repo owns the whole schema through its migrations: `sla_outages`, `sla_alert_state`, `sla_pir_reviews` and `sla_outage_corrections`.
 
 Each service connects with its own database user, so the boundary is enforced by the database rather than by convention:
 
 | User | Service | Access |
 | --- | --- | --- |
-| `ingestion_writer` | `sla-ingestion` | SELECT/INSERT/UPDATE/DELETE on `sla_outages` (DELETE because a correction can remove a partner or service, and an uncorrected redelivery deletes rows Jira no longer lists); SELECT/INSERT/UPDATE on `sla_pir_reviews`; SELECT/INSERT on `sla_outage_corrections` |
+| `ingestion_writer` | `sla-ingestion` | SELECT/INSERT/UPDATE/DELETE on `sla_outages` (DELETE because a correction can remove a partner); SELECT/INSERT/UPDATE on `sla_pir_reviews`; SELECT/INSERT on `sla_outage_corrections` |
 | `app_user` | `sla-dashboard` | SELECT on `sla_outages`, `sla_pir_reviews`, `sla_outage_corrections`; SELECT/INSERT/UPDATE on `sla_alert_state` and `sla_contract_terms` |
 
 ### 5.2 Other tables
@@ -673,7 +673,7 @@ The lighter "unusually bad month" heads-up from GTOC-46, computed against that p
 
 ### 10.6 Scheduling
 
-Cloud Scheduler calls `/api/internal/alerts/run` at 01:00 and 13:00 UTC. That catches changes driven by time alone, such as a scope crossing an elapsed-time floor with no new outage. The ingestion service also calls it after every capture or correction, so new data is evaluated immediately. Transition-only firing and compare-and-swap make overlapping calls harmless.
+Cloud Scheduler calls `/api/internal/alerts/run` at 01:00 and 13:00 UTC. That catches changes driven by time alone, such as a scope crossing an elapsed-time floor with no new outage. The ingestion service also calls it after every capture or correction, so new data is evaluated immediately. Transition-only firing and compare-and-swap make overlapping calls harmless. n8n is no longer used.
 
 ---
 
@@ -711,7 +711,7 @@ The UI shows processing state during extraction.
 
 A model extraction is a draft, never an authority. A target misread as 99.9% instead of 99.95% doubles the monthly allowance and every downstream figure with it, in the direction favouring Xsolla, and surfaces in a partner dispute.
 
-Incident attribution needs no gate before writing: it is a deterministic lookup. Contract extraction does, because a model reads free text and can be confidently wrong.
+Incident attribution no longer needs a gate before writing, because it is a deterministic lookup. Contract extraction does, because a model reads free text and can be confidently wrong.
 
 Unconfirmed terms are not returned by `listScopes`, so nothing half-verified can reach a status badge.
 
@@ -764,7 +764,7 @@ No UI snapshot tests.
 
 **Decided 2026-09-28.** Penalty credit never under-reports: a month short of a band's threshold by any amount is in the lower band. Evaluation starts at the later of `effectiveFrom` and 2026-01-01, prorating a mid-month first window. The terms carry no exclusions, because excluded events never become Jira tickets.
 
-**Closed 2026-09-28.** The `source` column is part of the schema this repo owns; no other team is involved.
+**Closed 2026-09-28.** The `source` column is part of the new schema, so it no longer depends on another team.
 
 **Closed 2026-09-21.** `outage_minutes` is wall-clock elapsed time, always positive, and together with `incident_started` is the sole basis for the timeline. Interval merging is valid as specified.
 

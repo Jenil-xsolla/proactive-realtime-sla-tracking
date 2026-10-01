@@ -12,6 +12,7 @@ import type {
   EngineTerms,
   Evaluation,
   PartnerScopes,
+  PenaltyFigure,
   SlaScope,
   UsableOutage,
   Window,
@@ -42,6 +43,7 @@ function terms(overrides: Partial<EngineTerms> = {}): EngineTerms {
     timezone: WINDOW_TIMEZONE,
     effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
     effectiveTo: null,
+    penaltyKind: "tiers",
     penaltyTiers: [
       { belowAvailability: 0.999, creditFraction: 0.1 },
       { belowAvailability: 0.99, creditFraction: 0.25 },
@@ -58,7 +60,7 @@ function serviceScope(
   service: string,
   overrides: Partial<EngineTerms> = {},
 ): SlaScope {
-  return { kind: "service", scopeId, service, terms: terms(overrides) };
+  return { kind: "service", scopeId, services: [service], terms: terms(overrides) };
 }
 
 function catchAll(
@@ -94,6 +96,13 @@ function expectTracking(
   return row;
 }
 
+function creditOf(figure: PenaltyFigure): Extract<PenaltyFigure, { kind: "credit" }> {
+  if (figure.kind !== "credit") {
+    throw new Error(`expected a credit, received ${figure.kind}`);
+  }
+  return figure;
+}
+
 function expectScored(
   results: readonly Evaluation[],
   scopeId: string,
@@ -127,6 +136,10 @@ describe("evaluate", () => {
     const source = engineSource();
     expect(source).not.toMatch(/new Date\(\s*\)/);
     expect(source).not.toMatch(/Date\.now\(/);
+  });
+
+  it("does not import the registry", () => {
+    expect(engineSource()).not.toMatch(/@\/registry|from ["'][^"']*registry/);
   });
 
   it("apportions an outage at 23:40 on the final day as 20 minutes then 30", () => {
@@ -408,8 +421,8 @@ describe("evaluate", () => {
     expect(withOutage.reason.consumedFraction).toBeNull();
     expect(Number.isFinite(withOutage.burnRate)).toBe(true);
     expect(Number.isFinite(withOutage.remainingMinutes)).toBe(true);
-    expect(Number.isFinite(withOutage.penalty.incurred.creditFraction)).toBe(true);
-    expect(Number.isFinite(withOutage.penalty.projected.creditFraction)).toBe(true);
+    expect(Number.isFinite(creditOf(withOutage.penalty.incurred).creditFraction)).toBe(true);
+    expect(Number.isFinite(creditOf(withOutage.penalty.projected).creditFraction)).toBe(true);
 
     const clean = expectScored(
       evaluate({
@@ -427,8 +440,8 @@ describe("evaluate", () => {
     expect(clean.status).toBe("breaching");
     expect(clean.reason.consumedFraction).toBeNull();
     expect(Number.isFinite(clean.burnRate)).toBe(true);
-    expect(Number.isFinite(clean.penalty.incurred.creditFraction)).toBe(true);
-    expect(Number.isFinite(clean.penalty.projected.creditFraction)).toBe(true);
+    expect(Number.isFinite(creditOf(clean.penalty.incurred).creditFraction)).toBe(true);
+    expect(Number.isFinite(creditOf(clean.penalty.projected).creditFraction)).toBe(true);
   });
 
   it("produces no January or February exposure for terms effective from March", () => {
@@ -699,10 +712,10 @@ describe("evaluate", () => {
     );
 
     expect(Object.keys(row.penalty).sort()).toEqual(["incurred", "projected"]);
-    expect(row.penalty.incurred.creditFraction).toBeCloseTo(0.1, 8);
-    expect(row.penalty.projected.creditFraction).toBeCloseTo(0.25, 8);
-    expect(row.penalty.incurred.amount).toEqual({ amount: 1000, currency: "XXX" });
-    expect(row.penalty.projected.amount).toEqual({ amount: 2500, currency: "XXX" });
+    expect(creditOf(row.penalty.incurred).creditFraction).toBeCloseTo(0.1, 8);
+    expect(creditOf(row.penalty.projected).creditFraction).toBeCloseTo(0.25, 8);
+    expect(creditOf(row.penalty.incurred).amount).toEqual({ amount: 1000, currency: "XXX" });
+    expect(creditOf(row.penalty.projected).amount).toEqual({ amount: 2500, currency: "XXX" });
   });
 
   it("does not cross a tier when availability equals belowAvailability", () => {
@@ -731,10 +744,10 @@ describe("evaluate", () => {
       "payments",
     );
 
-    expect(row.penalty.incurred.creditFraction).toBe(0);
-    expect(row.penalty.incurred.amount).toBeNull();
-    expect(row.penalty.projected.creditFraction).toBe(0);
-    expect(row.penalty.projected.amount).toBeNull();
+    expect(creditOf(row.penalty.incurred).creditFraction).toBe(0);
+    expect(creditOf(row.penalty.incurred).amount).toBeNull();
+    expect(creditOf(row.penalty.projected).creditFraction).toBe(0);
+    expect(creditOf(row.penalty.projected).amount).toBeNull();
   });
 
   it("applies the per-scope cap before reporting currency", () => {
@@ -777,12 +790,12 @@ describe("evaluate", () => {
 
     const fee = expectScored(results, "fee");
     const noFee = expectScored(results, "no-fee");
-    expect(fee.penalty.incurred.creditFraction).toBeCloseTo(0.3, 8);
-    expect(fee.penalty.projected.creditFraction).toBeCloseTo(0.3, 8);
-    expect(fee.penalty.incurred.amount).toEqual({ amount: 3000, currency: "XXX" });
-    expect(noFee.penalty.incurred.creditFraction).toBeCloseTo(0.3, 8);
-    expect(noFee.penalty.incurred.amount).toBeNull();
-    expect(noFee.penalty.projected.amount).toBeNull();
+    expect(creditOf(fee.penalty.incurred).creditFraction).toBeCloseTo(0.3, 8);
+    expect(creditOf(fee.penalty.projected).creditFraction).toBeCloseTo(0.3, 8);
+    expect(creditOf(fee.penalty.incurred).amount).toEqual({ amount: 3000, currency: "XXX" });
+    expect(creditOf(noFee.penalty.incurred).creditFraction).toBeCloseTo(0.3, 8);
+    expect(creditOf(noFee.penalty.incurred).amount).toBeNull();
+    expect(creditOf(noFee.penalty.projected).amount).toBeNull();
   });
 
   it("caps each scope proportionally after the per-scope cap, incurred and projected apart", () => {
@@ -826,12 +839,12 @@ describe("evaluate", () => {
 
     const payments = expectScored(results, "payments");
     const login = expectScored(results, "login");
-    expect(payments.penalty.incurred.creditFraction).toBeCloseTo(0.2, 8);
-    expect(login.penalty.incurred.creditFraction).toBeCloseTo(0.2, 8);
-    expect(payments.penalty.projected.creditFraction).toBeCloseTo(0.25, 8);
-    expect(login.penalty.projected.creditFraction).toBeCloseTo(0.25, 8);
-    expect(payments.penalty.incurred.amount).toBeNull();
-    expect(payments.penalty.projected.amount).toBeNull();
+    expect(creditOf(payments.penalty.incurred).creditFraction).toBeCloseTo(0.2, 8);
+    expect(creditOf(login.penalty.incurred).creditFraction).toBeCloseTo(0.2, 8);
+    expect(creditOf(payments.penalty.projected).creditFraction).toBeCloseTo(0.25, 8);
+    expect(creditOf(login.penalty.projected).creditFraction).toBeCloseTo(0.25, 8);
+    expect(creditOf(payments.penalty.incurred).amount).toBeNull();
+    expect(creditOf(payments.penalty.projected).amount).toBeNull();
   });
 
   it("splits an aggregate cap in proportion to each scope's own credit", () => {
@@ -867,8 +880,8 @@ describe("evaluate", () => {
       asOf: atEnd(january),
     });
 
-    expect(expectScored(results, "payments").penalty.incurred.creditFraction).toBeCloseTo(0.15, 8);
-    expect(expectScored(results, "login").penalty.incurred.creditFraction).toBeCloseTo(0.05, 8);
+    expect(creditOf(expectScored(results, "payments").penalty.incurred).creditFraction).toBeCloseTo(0.15, 8);
+    expect(creditOf(expectScored(results, "login").penalty.incurred).creditFraction).toBeCloseTo(0.05, 8);
   });
 
   it("reports no prior downtime when three covered months are clean", () => {
@@ -963,6 +976,199 @@ describe("evaluate", () => {
       currentMinutes: 40,
       versusMedian: "above",
     });
+  });
+
+  it("keeps an outage that exactly meets a threshold in the higher band", () => {
+    const tiers = {
+      target: 0.9995,
+      penaltyKind: "tiers" as const,
+      penaltyTiers: [
+        { belowAvailability: 0.9995, creditFraction: 0.05 },
+        { belowAvailability: 0.995, creditFraction: 0.1 },
+        { belowAvailability: 0.99, creditFraction: 0.25 },
+      ],
+    };
+    const cases = [
+      { label: "30-day 21.6", window: monthWindow(2026, 5), minutes: 21.6, percent: 0 },
+      { label: "30-day 21.7", window: monthWindow(2026, 5), minutes: 21.7, percent: 5 },
+      { label: "30-day 216", window: monthWindow(2026, 5), minutes: 216, percent: 5 },
+      { label: "30-day 216.1", window: monthWindow(2026, 5), minutes: 216.1, percent: 10 },
+      { label: "30-day 432", window: monthWindow(2026, 5), minutes: 432, percent: 10 },
+      { label: "30-day 432.1", window: monthWindow(2026, 5), minutes: 432.1, percent: 25 },
+      { label: "28-day 20.16", window: monthWindow(2026, 1), minutes: 20.16, percent: 0 },
+      { label: "29-day 208.8", window: monthWindow(2028, 1), minutes: 208.8, percent: 5 },
+    ];
+
+    for (const entry of cases) {
+      const row = expectScored(
+        evaluate({
+          outages: [
+            outage({
+              pirKey: entry.label,
+              incidentStarted: entry.window.start,
+              outageMinutes: entry.minutes,
+            }),
+          ],
+          scopes: [partner([serviceScope("payments", "payments", tiers)])],
+          window: entry.window,
+          asOf: atEnd(entry.window),
+        }),
+        "payments",
+      );
+      expect(creditOf(row.penalty.incurred).creditFraction, entry.label).toBe(entry.percent / 100);
+    }
+  });
+
+  it("merges overlapping outages across the services in one combined scope", () => {
+    const january = monthWindow(2026, 0);
+    const row = expectScored(
+      evaluate({
+        outages: [
+          outage({
+            pirKey: "PIR-PAY",
+            serviceId: "payments",
+            incidentStarted: new Date(Date.UTC(2026, 0, 10, 10, 0)),
+            outageMinutes: 30,
+          }),
+          outage({
+            pirKey: "PIR-LOGIN",
+            serviceId: "login",
+            incidentStarted: new Date(Date.UTC(2026, 0, 10, 10, 20)),
+            outageMinutes: 30,
+          }),
+        ],
+        scopes: [
+          partner([
+            {
+              kind: "service",
+              scopeId: "checkout",
+              services: ["payments", "login"],
+              terms: terms(),
+            },
+          ]),
+        ],
+        window: january,
+        asOf: atEnd(january),
+      }),
+      "checkout",
+    );
+
+    expect(row.usedMinutes).toBe(50);
+  });
+
+  it("reports not_entered as unknown and none as no penalty clause", () => {
+    const june = monthWindow(2026, 5);
+    const outages = [
+      outage({
+        pirKey: "PIR-DOWN",
+        incidentStarted: june.start,
+        outageMinutes: 500,
+      }),
+    ];
+    const unknown = expectScored(
+      evaluate({
+        outages,
+        scopes: [
+          partner([
+            serviceScope("unentered", "payments", {
+              penaltyKind: "not_entered",
+              penaltyTiers: [],
+            }),
+          ]),
+        ],
+        window: june,
+        asOf: atEnd(june),
+      }),
+      "unentered",
+    );
+    const none = expectScored(
+      evaluate({
+        outages,
+        scopes: [
+          partner([
+            serviceScope("no-clause", "payments", {
+              penaltyKind: "none",
+              penaltyTiers: [],
+            }),
+          ]),
+        ],
+        window: june,
+        asOf: atEnd(june),
+      }),
+      "no-clause",
+    );
+
+    expect(unknown.penalty.incurred).toEqual({
+      kind: "unknown",
+      statement: "penalty clause, not yet entered",
+    });
+    expect(unknown.penalty.projected).toEqual(unknown.penalty.incurred);
+    expect(JSON.stringify(unknown.penalty)).not.toContain('"creditFraction":0');
+    expect(none.penalty.incurred).toEqual({ kind: "none", statement: "no penalty clause" });
+    expect(none.penalty.projected).toEqual(none.penalty.incurred);
+  });
+
+  it("evaluates a pre-2026 contract across all of January 2026", () => {
+    const january = monthWindow(2026, 0);
+    const row = expectScored(
+      evaluate({
+        outages: [
+          outage({
+            pirKey: "PIR-JAN",
+            incidentStarted: new Date(Date.UTC(2026, 0, 15, 0, 0)),
+            outageMinutes: 10,
+          }),
+        ],
+        scopes: [
+          partner([
+            serviceScope("payments", "payments", {
+              target: 0.9995,
+              effectiveFrom: new Date("2023-03-27T00:00:00.000Z"),
+            }),
+          ]),
+        ],
+        window: january,
+        asOf: atEnd(january),
+      }),
+      "payments",
+    );
+
+    expect(row.allowedMinutes).toBe(22.32);
+    expect(row.usedMinutes).toBe(10);
+  });
+
+  it("prorates the first window when effectiveFrom falls inside it", () => {
+    const june = monthWindow(2027, 5);
+    const row = expectScored(
+      evaluate({
+        outages: [
+          outage({
+            pirKey: "PIR-BEFORE",
+            incidentStarted: new Date(Date.UTC(2027, 5, 10, 12, 0)),
+            outageMinutes: 100,
+          }),
+          outage({
+            pirKey: "PIR-AFTER",
+            incidentStarted: new Date(Date.UTC(2027, 5, 20, 12, 0)),
+            outageMinutes: 30,
+          }),
+        ],
+        scopes: [
+          partner([
+            serviceScope("payments", "payments", {
+              target: 0.9995,
+              effectiveFrom: new Date("2027-06-15T00:00:00.000Z"),
+            }),
+          ]),
+        ],
+        window: june,
+        asOf: atEnd(june),
+      }),
+      "payments",
+    );
+
+    expect(row.allowedMinutes).toBe(11.52);
+    expect(row.usedMinutes).toBe(30);
   });
 
   it("rejects a scope that is not measured in UTC", () => {

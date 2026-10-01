@@ -140,6 +140,49 @@ describe("service grants (spec §5.1)", () => {
     });
   });
 
+  it("app_user can read and write sla_contract_terms but cannot delete it", async () => {
+    testDb = await createTestDatabase();
+
+    await asRole(testDb, "app_user", async () => {
+      await expect(
+        testDb.client.query(
+          `insert into sla_contract_terms (partner_slug, lifecycle, terms, updated_by, updated_at, created_at)
+           values ($1, $2, $3, $4, now(), now())`,
+          ["roblox", "contract_bound", "{}", "ada"],
+        ),
+      ).resolves.toBeDefined();
+
+      await expect(testDb.client.query("SELECT * FROM sla_contract_terms")).resolves.toBeDefined();
+
+      await expect(
+        testDb.client.query(`update sla_contract_terms set updated_by = $1 where partner_slug = $2`, [
+          "grace",
+          "roblox",
+        ]),
+      ).resolves.toBeDefined();
+
+      await expect(
+        testDb.client.query(`delete from sla_contract_terms where partner_slug = $1`, ["roblox"]),
+      ).rejects.toThrow(/permission denied/);
+    });
+  });
+
+  it("ingestion_writer cannot read or write sla_contract_terms", async () => {
+    testDb = await createTestDatabase();
+
+    await asRole(testDb, "ingestion_writer", async () => {
+      await expect(testDb.client.query("SELECT * FROM sla_contract_terms")).rejects.toThrow(/permission denied/);
+
+      await expect(
+        testDb.client.query(
+          `insert into sla_contract_terms (partner_slug, lifecycle, terms, updated_by, updated_at, created_at)
+           values ($1, $2, $3, $4, now(), now())`,
+          ["roblox", "contract_bound", "{}", "ada"],
+        ),
+      ).rejects.toThrow(/permission denied/);
+    });
+  });
+
   it("ingestion_writer can INSERT into sla_outages and sla_outage_corrections using the serial sequences", async () => {
     testDb = await createTestDatabase();
     await seedPirReview(testDb, "GTO-5");

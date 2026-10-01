@@ -1,3 +1,4 @@
+import type { PenaltyKind, PenaltyTier } from "@/engine";
 import type { PartnerId, ServiceId } from "@/registry";
 
 /**
@@ -13,29 +14,7 @@ export const TERMS_LIFECYCLE_STATES = [
 
 export type TermsLifecycle = (typeof TERMS_LIFECYCLE_STATES)[number];
 
-/**
- * Carve-outs a contract can name. Extend this union in the pull request that
- * enters a contract using a class that is not listed. Do not map an unlisted
- * class onto a nearby one.
- */
-export const EXCLUSION_CLASSES = [
-  "planned_maintenance",
-  "partner_caused",
-  "force_majeure",
-] as const;
-
-export type ExclusionClass = (typeof EXCLUSION_CLASSES)[number];
-
-/**
- * One row of the contract penalty table, copied from the clause.
- * `belowAvailability` is the contract's own uptime figure (0.99 means below 99%).
- * The engine decides which tier was crossed. Do not precompute that here.
- */
-export interface PenaltyTier {
-  belowAvailability: number;
-  /** Credit as a fraction of fees. 0.1 is a 10% credit. */
-  creditFraction: number;
-}
+export type { PenaltyKind, PenaltyTier };
 
 /** Fee figure as written in the contract. Absent on `SlaTerms` means percentage-only reporting. */
 export interface Money {
@@ -45,6 +24,10 @@ export interface Money {
   currency: string;
 }
 
+/**
+ * Engine terms. Fractions and below-threshold tiers. Produced by `loadContractFile`;
+ * not the shape a contract file is written in.
+ */
 export interface SlaTerms {
   /** Uptime target as a fraction. 0.999 is 99.9%. */
   target: number;
@@ -55,7 +38,7 @@ export interface SlaTerms {
   effectiveFrom: Date;
   /** Last instant these terms apply, inclusive. Null when the contract states no end. */
   effectiveTo: Date | null;
-  exclusions: ExclusionClass[];
+  penaltyKind: PenaltyKind;
   penaltyTiers: PenaltyTier[];
   /** Maximum credit fraction for this scope. Null when the contract states no per-scope cap. */
   perScopeCap: number | null;
@@ -63,7 +46,7 @@ export interface SlaTerms {
   contractAggregateCap: number | null;
   /** Null when the contract states no minimum duration. */
   minimumCountableOutageMinutes: number | null;
-  /** Clause reference for the figures in this record. */
+  /** Clause reference for the figures in this record. Empty when the file omitted it. */
   sourceClause: string;
   /** Null means the contract states no fee and reporting stays in percentages. */
   monthlyFee: Money | null;
@@ -73,7 +56,8 @@ export type SlaScope =
   | {
       kind: "service";
       scopeId: string;
-      service: ServiceId;
+      /** Named services plus anything they include. One combined target. */
+      services: readonly ServiceId[];
       terms: SlaTerms;
     }
   | {
@@ -88,9 +72,63 @@ export type SlaScope =
       terms: SlaTerms;
     };
 
+/**
+ * What the form saves and what a hand-authored file contains.
+ * Percentages as the contract writes them. `loadContractFile` converts this
+ * into `SlaScope` / `SlaTerms`.
+ */
+export interface ContractFile {
+  partner: PartnerId;
+  lifecycle: "terms_pending_review" | "contract_bound";
+  /** Calendar date from the contract, `YYYY-MM-DD`. */
+  effectiveFrom: string;
+  /** Calendar date, inclusive, or null when the contract states no end. */
+  effectiveTo: string | null;
+  scopes: ContractScope[];
+  /** Percent. Null when the contract states no aggregate cap. */
+  contractAggregateCap: number | null;
+}
+
+export interface ContractScope {
+  kind: "service" | "catch_all";
+  scopeId: string;
+  /** Kind `service` only. One or more registry ids, one combined target. */
+  services?: ServiceId[];
+  /** Kind `catch_all` only. Read from the contract. No default. */
+  includesScopedServices?: boolean;
+  /** Percent, for example 99.95. */
+  target: number;
+  penalty: ContractPenalty;
+  /** Omitted figures still convert. The loader reports a warning. */
+  sourceClause?: string;
+}
+
+export type ContractPenalty =
+  | { kind: "none" }
+  | { kind: "not_entered" }
+  | {
+      kind: "tiers";
+      /** Percent. Highest `atOrAbove` first. The last `atOrAbove` is 0. */
+      tiers: { atOrAbove: number; credit: number }[];
+      /** Percent. Null when the contract states no per-scope cap. */
+      perScopeCap: number | null;
+    };
+
+/** The contract-file body. Partner and lifecycle are stored beside it. */
+export type ContractTermsBody = {
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  scopes: ContractScope[];
+  contractAggregateCap: number | null;
+};
+
 type TermsFileBase = {
   partner: PartnerId;
-  scopes: readonly SlaScope[];
+  lifecycle: ContractFile["lifecycle"];
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  scopes: ContractScope[];
+  contractAggregateCap: number | null;
 };
 
 /**

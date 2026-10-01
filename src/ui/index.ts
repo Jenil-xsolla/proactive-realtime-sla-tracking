@@ -1,4 +1,5 @@
 export { Button } from "./button";
+export { Field, TextArea, TextInput } from "./text-input";
 export { Card } from "./card";
 export { Chip } from "./chip";
 export { Caret } from "./icon";

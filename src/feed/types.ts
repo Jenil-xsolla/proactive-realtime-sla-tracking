@@ -1,12 +1,12 @@
 import type { IngestionHealth, OutageHealth, OutagePartition, OutageProvenance, UnresolvedValue, UnusableReason } from "@/data";
 import type { BaselineComparison, PenaltyFigure, StatusReason } from "@/engine";
 import type { SeverityId } from "@/registry";
-import type { SlaTermsProvider } from "@/terms";
+import type { InvalidContractTerms, SlaTermsProvider } from "@/terms";
 import type { ViewerRole } from "./viewer";
 
 /**
  * Optional stand-ins for tests. Production routes omit this and read the
- * database plus the empty terms provider.
+ * database plus the contract-terms table.
  */
 export type FeedSources = {
   partition?: OutagePartition;
@@ -119,20 +119,30 @@ export type BusinessRow =
         fraction: number | null;
       };
       projectedExhaustion: string | null;
-      /** 10 is a 10% credit. Incurred and projected stay separate. */
+      /** Incurred and projected stay separate. A percent is the credit; the other two kinds are not numbers. */
       creditPercentage: {
-        incurred: number;
-        projected: number;
+        incurred: BusinessCredit;
+        projected: BusinessCredit;
       };
       summary: string;
     };
+
+export type BusinessCredit =
+  | { kind: "percent"; percent: number }
+  | Exclude<PenaltyFigure, { kind: "credit" }>;
 
 export type SlaFeed = {
   asOf: string;
   health: OutageHealth;
 } & (
   | { role: "business"; rows: BusinessRow[]; ingestion: IngestionHealthCounts }
-  | { role: "technical" | "system"; rows: TechnicalRow[]; ingestion: IngestionHealthDetail }
+  | {
+      role: "technical" | "system";
+      rows: TechnicalRow[];
+      ingestion: IngestionHealthDetail;
+      /** Stored rows `loadContractFile` rejected. Those partners score nothing. */
+      invalidTerms: InvalidContractTerms[];
+    }
 );
 
 export type UnusableRow = {
@@ -154,4 +164,6 @@ export type SlaHealth =
       health: OutageHealth;
       unusable: UnusableRow[];
       ingestion: IngestionHealthDetail;
+      /** Stored rows `loadContractFile` rejected. Those partners score nothing. */
+      invalidTerms: InvalidContractTerms[];
     };

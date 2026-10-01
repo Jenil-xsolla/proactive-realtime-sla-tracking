@@ -1,5 +1,6 @@
 import "@/terms/fixture-guard";
-import type { HandAuthoredTermsFile, SlaTerms } from "@/terms/types";
+import type { SelectableTermsFile } from "@/terms/select";
+import type { SlaTerms } from "@/terms/types";
 
 function fixtureTerms(overrides: Partial<SlaTerms> = {}): SlaTerms {
   return {
@@ -8,7 +9,7 @@ function fixtureTerms(overrides: Partial<SlaTerms> = {}): SlaTerms {
     timezone: "UTC",
     effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
     effectiveTo: null,
-    exclusions: ["planned_maintenance"],
+    penaltyKind: "tiers",
     penaltyTiers: [
       { belowAvailability: 0.999, creditFraction: 0.1 },
       { belowAvailability: 0.99, creditFraction: 0.25 },
@@ -31,7 +32,7 @@ export const FIXTURE_TERMS_FILES = [
       {
         kind: "service",
         scopeId: "fixture-scopely-payments",
-        service: "payments",
+        services: ["payments"],
         terms: fixtureTerms(),
       },
       {
@@ -51,7 +52,7 @@ export const FIXTURE_TERMS_FILES = [
       {
         kind: "service",
         scopeId: "fixture-niantic-payments",
-        service: "payments",
+        services: ["payments"],
         terms: fixtureTerms({ monthlyFee: null }),
       },
       {
@@ -79,4 +80,4 @@ export const FIXTURE_TERMS_FILES = [
       },
     ],
   },
-] satisfies readonly HandAuthoredTermsFile[];
+] satisfies readonly SelectableTermsFile[];

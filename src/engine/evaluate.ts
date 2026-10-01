@@ -1,7 +1,8 @@
-import { DATA_COVERAGE_START, MIN_BASELINE_MONTHS, WINDOW_TIMEZONE } from "./constants";
+import { DATA_COVERAGE_START, EVALUATION_START_MS, MIN_BASELINE_MONTHS, WINDOW_TIMEZONE } from "./constants";
 import {
   durationMinutes,
   elapsedFraction,
+  fromMs,
   intersect,
   mergeIntervals,
   observedInterval,
@@ -10,7 +11,15 @@ import {
   windowMinutes,
   type Interval,
 } from "./intervals";
-import { capAt, penaltyFigure, rawCredit, scaleToAggregate, sharedAggregateCap } from "./penalty";
+import {
+  allowanceMinutes,
+  capAt,
+  penaltyFor,
+  rawCredit,
+  scaleRawPenalties,
+  sharedAggregateCap,
+  type RawPenalty,
+} from "./penalty";
 import { classify } from "./status";
 import type {
   BaselineComparison,
@@ -36,10 +45,7 @@ export function evaluate<P extends string, S extends string>(input: {
   asOf: Date;
 }): Evaluation<P, S>[] {
   assertInstants(input.window, input.asOf);
-  const minutesInWindow = windowMinutes(input.window);
   const observed = observedInterval(input.window, input.asOf);
-  const elapsed = elapsedFraction(input.window, input.asOf);
-  const anchorMs = Math.min(input.asOf.getTime(), input.window.end.getTime());
 
   const scopesByPartner = new Map<P, SlaScope<S>[]>();
   const partnerOrder: P[] = [];
@@ -62,22 +68,13 @@ export function evaluate<P extends string, S extends string>(input: {
   for (const partnerId of partnerOrder) {
     const scopes = scopesByPartner.get(partnerId) ?? [];
     const partnerOutages = input.outages.filter((row) => row.partnerId === partnerId);
-    const active = scopes.filter((scope) => scopeIsActive(scope, observed));
+    const active = scopes.filter((scope) => scopeIsActive(scope, observed, input.window));
     if (active.length === 0) {
       results.push(...trackingRows(partnerId, partnerOutages, input.window, observed));
       continue;
     }
     results.push(
-      ...scoredRows(
-        partnerId,
-        active,
-        partnerOutages,
-        input.window,
-        observed,
-        elapsed,
-        minutesInWindow,
-        anchorMs,
-      ),
+      ...scoredRows(partnerId, active, partnerOutages, input.window, input.asOf),
     );
   }
   return results;
@@ -96,11 +93,19 @@ function assertInstants(window: Window, asOf: Date): void {
   }
 }
 
-function scopeIsActive(scope: SlaScope, observed: Interval | null): boolean {
+function scopeIsActive(scope: SlaScope, observed: Interval | null, window: Window): boolean {
   if (observed === null) {
     return false;
   }
-  return overlaps(observed, effectiveInterval(scope.terms));
+  if (!overlaps(observed, effectiveInterval(scope.terms))) {
+    return false;
+  }
+  return evaluationStartMs(window, scope.terms) < window.end.getTime();
+}
+
+/** Later of the calendar start, effectiveFrom, and 2026-01-01. */
+function evaluationStartMs(window: Window, terms: EngineTerms): number {
+  return Math.max(window.start.getTime(), terms.effectiveFrom.getTime(), EVALUATION_START_MS);
 }
 
 function effectiveInterval(terms: EngineTerms): Interval {
@@ -115,10 +120,7 @@ function scoredRows<P extends string, S extends string>(
   scopes: readonly SlaScope<S>[],
   outages: readonly UsableOutage<P, S>[],
   window: Window,
-  observed: Interval | null,
-  elapsed: number,
-  minutesInWindow: number,
-  anchorMs: number,
+  asOf: Date,
 ): Evaluation<P, S>[] {
   for (const scope of scopes) {
     if (scope.terms.timezone !== WINDOW_TIMEZONE) {
@@ -131,42 +133,44 @@ function scoredRows<P extends string, S extends string>(
   const scopedServices = new Set<S>();
   for (const scope of scopes) {
     if (scope.kind === "service") {
-      scopedServices.add(scope.service);
+      for (const service of scope.services) {
+        scopedServices.add(service);
+      }
     }
   }
 
   const drafts = scopes.map((scope) => {
-    // Downtime is clipped to the effective interval. Allowance stays the full window.
+    const startMs = evaluationStartMs(window, scope.terms);
+    const scopeWindow: Window = { start: fromMs(startMs), end: window.end };
+    const scopeMinutes = windowMinutes(scopeWindow);
+    const scopeElapsed = elapsedFraction(scopeWindow, asOf);
+    const scopeObserved = observedInterval(scopeWindow, asOf);
     const bounds =
-      observed === null ? null : intersect(observed, effectiveInterval(scope.terms));
+      scopeObserved === null ? null : intersect(scopeObserved, effectiveInterval(scope.terms));
     const matching = outages.filter((row) => matchesScope(row, scope, scopedServices));
     const attributed = attribute(matching, bounds);
     const counted = countDowntime(attributed);
-    const allowedMinutes = (1 - scope.terms.target) * minutesInWindow;
-    const projectedMinutes = elapsed > 0 ? counted.usedMinutes / elapsed : counted.usedMinutes;
+    const projectedMinutes = scopeElapsed > 0 ? counted.usedMinutes / scopeElapsed : counted.usedMinutes;
     return {
       scope,
       usedMinutes: counted.usedMinutes,
-      allowedMinutes,
+      allowedMinutes: allowanceMinutes(scope.terms.target, scopeMinutes),
       merged: counted.merged,
       outages: refs(attributed),
-      incurred: capAt(
-        rawCredit(counted.usedMinutes, minutesInWindow, scope.terms.penaltyTiers),
-        scope.terms.perScopeCap,
-      ),
-      projected: capAt(
-        rawCredit(projectedMinutes, minutesInWindow, scope.terms.penaltyTiers),
-        scope.terms.perScopeCap,
-      ),
+      elapsed: scopeElapsed,
+      windowMinutes: scopeMinutes,
+      anchorMs: Math.min(asOf.getTime(), scopeWindow.end.getTime()),
+      incurred: scopePenalty(counted.usedMinutes, scopeMinutes, scope.terms),
+      projected: scopePenalty(projectedMinutes, scopeMinutes, scope.terms),
     };
   });
 
   const aggregateCap = sharedAggregateCap(scopes);
-  const incurred = scaleToAggregate(
+  const incurred = scaleRawPenalties(
     drafts.map((draft) => draft.incurred),
     aggregateCap,
   );
-  const projected = scaleToAggregate(
+  const projected = scaleRawPenalties(
     drafts.map((draft) => draft.projected),
     aggregateCap,
   );
@@ -175,10 +179,10 @@ function scoredRows<P extends string, S extends string>(
     const classification = classify({
       usedMinutes: draft.usedMinutes,
       allowedMinutes: draft.allowedMinutes,
-      elapsedFraction: elapsed,
-      windowMinutes: minutesInWindow,
+      elapsedFraction: draft.elapsed,
+      windowMinutes: draft.windowMinutes,
       merged: draft.merged,
-      anchorMs,
+      anchorMs: draft.anchorMs,
     });
     return {
       kind: "scored",
@@ -192,13 +196,23 @@ function scoredRows<P extends string, S extends string>(
       status: classification.status,
       projectedExhaustion: classification.projectedExhaustion,
       penalty: {
-        incurred: penaltyFigure(incurred[index] ?? 0, draft.scope.terms.monthlyFee),
-        projected: penaltyFigure(projected[index] ?? 0, draft.scope.terms.monthlyFee),
+        incurred: penaltyFor(incurred[index] ?? 0, draft.scope.terms.monthlyFee),
+        projected: penaltyFor(projected[index] ?? 0, draft.scope.terms.monthlyFee),
       },
       reason: classification.reason,
       outages: draft.outages,
     };
   });
+}
+
+function scopePenalty(minutes: number, windowMinutes: number, terms: EngineTerms): RawPenalty {
+  if (terms.penaltyKind === "none") {
+    return "none";
+  }
+  if (terms.penaltyKind === "not_entered") {
+    return "unknown";
+  }
+  return capAt(rawCredit(minutes, windowMinutes, terms.penaltyTiers), terms.perScopeCap);
 }
 
 function matchesScope<P extends string, S extends string>(
@@ -207,7 +221,7 @@ function matchesScope<P extends string, S extends string>(
   scopedServices: ReadonlySet<S>,
 ): boolean {
   if (scope.kind === "service") {
-    return row.serviceId === scope.service;
+    return scope.services.includes(row.serviceId);
   }
   if (scope.includesScopedServices) {
     return true;

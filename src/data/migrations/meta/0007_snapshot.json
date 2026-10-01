@@ -1,0 +1,472 @@
+{
+  "id": "74415506-c748-4f42-8d37-bdf1a3797676",
+  "prevId": "6dd0a4cf-6255-4588-93ad-fcec3065e005",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.sla_alert_state": {
+      "name": "sla_alert_state",
+      "schema": "",
+      "columns": {
+        "partner_slug": {
+          "name": "partner_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope_id": {
+          "name": "scope_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period": {
+          "name": "period",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_status": {
+          "name": "last_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_alerted_at": {
+          "name": "last_alerted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alert_count": {
+          "name": "alert_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "sla_alert_state_partner_slug_scope_id_period_pk": {
+          "name": "sla_alert_state_partner_slug_scope_id_period_pk",
+          "columns": [
+            "partner_slug",
+            "scope_id",
+            "period"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sla_contract_terms": {
+      "name": "sla_contract_terms",
+      "schema": "",
+      "columns": {
+        "partner_slug": {
+          "name": "partner_slug",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "lifecycle": {
+          "name": "lifecycle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "terms": {
+          "name": "terms",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "sla_contract_terms_lifecycle_check": {
+          "name": "sla_contract_terms_lifecycle_check",
+          "value": "\"sla_contract_terms\".\"lifecycle\" in ('terms_pending_review','contract_bound')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.sla_outage_corrections": {
+      "name": "sla_outage_corrections",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "pir_key": {
+          "name": "pir_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "corrected_by": {
+          "name": "corrected_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "corrected_at": {
+          "name": "corrected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "before": {
+          "name": "before",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "after": {
+          "name": "after",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "sla_outage_corrections_pir_key_idx": {
+          "name": "sla_outage_corrections_pir_key_idx",
+          "columns": [
+            {
+              "expression": "pir_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "sla_outage_corrections_pir_key_sla_pir_reviews_pir_key_fk": {
+          "name": "sla_outage_corrections_pir_key_sla_pir_reviews_pir_key_fk",
+          "tableFrom": "sla_outage_corrections",
+          "columnsFrom": [
+            "pir_key"
+          ],
+          "tableTo": "sla_pir_reviews",
+          "columnsTo": [
+            "pir_key"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sla_outages": {
+      "name": "sla_outages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "pir_key": {
+          "name": "pir_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "partner": {
+          "name": "partner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "partner_id": {
+          "name": "partner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "incident_started": {
+          "name": "incident_started",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "affected_service": {
+          "name": "affected_service",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outage_minutes": {
+          "name": "outage_minutes",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "severity": {
+          "name": "severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decision_type": {
+          "name": "decision_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_by": {
+          "name": "reviewed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_at": {
+          "name": "reviewed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pir_url": {
+          "name": "pir_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "sla_outages_pir_key_partner_service_key": {
+          "name": "sla_outages_pir_key_partner_service_key",
+          "columns": [
+            "pir_key",
+            "partner",
+            "affected_service"
+          ],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "sla_outages_source_check": {
+          "name": "sla_outages_source_check",
+          "value": "\"sla_outages\".\"source\" in ('pipeline','backfill')"
+        },
+        "sla_outages_decision_type_check": {
+          "name": "sla_outages_decision_type_check",
+          "value": "\"sla_outages\".\"decision_type\" is null or \"sla_outages\".\"decision_type\" in ('system_written','human_corrected')"
+        },
+        "sla_outages_decision_type_source_check": {
+          "name": "sla_outages_decision_type_source_check",
+          "value": "(\"sla_outages\".\"decision_type\" is null) = (\"sla_outages\".\"source\" = 'backfill')"
+        },
+        "sla_outages_reviewed_by_check": {
+          "name": "sla_outages_reviewed_by_check",
+          "value": "coalesce(\"sla_outages\".\"decision_type\" = 'human_corrected', false) = (\"sla_outages\".\"reviewed_by\" is not null)"
+        },
+        "sla_outages_reviewed_at_check": {
+          "name": "sla_outages_reviewed_at_check",
+          "value": "coalesce(\"sla_outages\".\"decision_type\" = 'human_corrected', false) = (\"sla_outages\".\"reviewed_at\" is not null)"
+        },
+        "sla_outages_outage_minutes_check": {
+          "name": "sla_outages_outage_minutes_check",
+          "value": "\"sla_outages\".\"outage_minutes\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.sla_pir_reviews": {
+      "name": "sla_pir_reviews",
+      "schema": "",
+      "columns": {
+        "pir_key": {
+          "name": "pir_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "unresolved_values": {
+          "name": "unresolved_values",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "incident_started": {
+          "name": "incident_started",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outage_minutes": {
+          "name": "outage_minutes",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "affected_services": {
+          "name": "affected_services",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "severity": {
+          "name": "severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pir_url": {
+          "name": "pir_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slack_channel": {
+          "name": "slack_channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slack_ts": {
+          "name": "slack_ts",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slack_error": {
+          "name": "slack_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "sla_pir_reviews_status_check": {
+          "name": "sla_pir_reviews_status_check",
+          "value": "\"sla_pir_reviews\".\"status\" in ('received','skipped','captured','failed')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "views": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

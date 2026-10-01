@@ -82,6 +82,15 @@ describe("isPathAllowed", () => {
     it("404s a sub-path below one of its own paths", () => {
       expect(isPathAllowed("ingestion", "/api/ingest/pir-approved/extra")).toBe(false);
     });
+
+    it("404s contract terms API routes", () => {
+      expect(isPathAllowed("ingestion", "/api/sla/contract-terms/scopely")).toBe(false);
+      expect(isPathAllowed("ingestion", "/api/sla/contract-terms/scopely/")).toBe(false);
+    });
+
+    it("404s the contract terms page", () => {
+      expect(isPathAllowed("ingestion", "/partners/scopely/terms")).toBe(false);
+    });
   });
 
   describe("dashboard role", () => {
@@ -107,6 +116,11 @@ describe("isPathAllowed", () => {
 
     it("404s a sub-path below an ingestion-only path", () => {
       expect(isPathAllowed("dashboard", "/api/ingest/pir-approved/extra")).toBe(false);
+    });
+
+    it("allows contract terms API routes and the terms page", () => {
+      expect(isPathAllowed("dashboard", "/api/sla/contract-terms/scopely")).toBe(true);
+      expect(isPathAllowed("dashboard", "/partners/scopely/terms")).toBe(true);
     });
   });
 });
@@ -137,6 +151,15 @@ describe("proxy", () => {
     );
 
     expect(response.status).toBe(200);
+  });
+
+  it("returns 404 with no-store for contract terms when the role is ingestion", async () => {
+    process.env.SERVICE_ROLE = "ingestion";
+
+    const response = await proxy(new NextRequest("http://localhost/api/sla/contract-terms/scopely"));
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   it("fails closed (404) when SERVICE_ROLE is missing", async () => {

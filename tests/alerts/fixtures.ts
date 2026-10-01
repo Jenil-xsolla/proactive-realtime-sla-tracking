@@ -11,6 +11,7 @@ export function systemFeed(rows: TechnicalRow[], asOf = "2026-09-15T12:00:00.000
     role: "system",
     health: emptyHealth(),
     rows,
+    invalidTerms: [],
     ingestion: { status: "ok", counts: { failed: 0, unresolved: 0, withoutMessage: 0 }, failed: [], unresolved: [], withoutMessage: [] },
   };
 }
@@ -30,8 +31,8 @@ export function scoredRow(
     status,
     projectedExhaustion: null,
     penalty: {
-      incurred: { creditFraction: 0.1, amount: null },
-      projected: { creditFraction: 0.25, amount: null },
+      incurred: { kind: "credit", creditFraction: 0.1, amount: null },
+      projected: { kind: "credit", creditFraction: 0.25, amount: null },
     },
     reason: {
       rule: status === "breaching" ? "breaching" : status === "at_risk" ? "trend" : "meeting",

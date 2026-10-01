@@ -1,4 +1,12 @@
-export { createDatabase, getDatabase, type Database } from "./db";
+export {
+  readContractTerms,
+  readContractTermsForPartner,
+  saveContractTerms,
+  type ContractTermsBody,
+  type ContractTermsRow,
+  type SaveContractTermsResult,
+} from "./contract-terms";
+export { schema, createDatabase, getDatabase, type Database } from "./db";
 export { parseMerchantId } from "./merchant-id";
 export {
   loadOutages,
@@ -23,6 +31,7 @@ export {
 } from "./pir-reviews";
 export { classifyPartnerCoverage, type ObservedPartnerPair, type RegistryReport } from "./registry-report";
 export { slaAlertState } from "./schema/alert-state";
+export { slaContractTerms } from "./schema/contract-terms";
 export { slaOutageCorrections } from "./schema/outage-corrections";
 export { slaOutages } from "./schema/outages";
 export { slaPirReviews, type UnresolvedValue } from "./schema/pir-reviews";

@@ -11,26 +11,37 @@ import {
   writeBacktestFile,
 } from "../../scripts/backtest";
 
-function terms(effectiveFrom: string, effectiveTo: string | null = null): EngineTerms {
+function terms(
+  effectiveFrom: string,
+  effectiveTo: string | null = null,
+  overrides: Partial<EngineTerms> = {},
+): EngineTerms {
   return {
     target: 0.999,
     window: "calendar_month",
     timezone: WINDOW_TIMEZONE,
     effectiveFrom: new Date(effectiveFrom),
     effectiveTo: effectiveTo === null ? null : new Date(effectiveTo),
+    penaltyKind: "tiers",
     penaltyTiers: [{ belowAvailability: 0.999, creditFraction: 0.1 }],
     perScopeCap: null,
     contractAggregateCap: null,
     monthlyFee: null,
+    ...overrides,
   };
 }
 
-function payments(scopeId: string, effectiveFrom: string, effectiveTo: string | null = null) {
+function payments(
+  scopeId: string,
+  effectiveFrom: string,
+  effectiveTo: string | null = null,
+  overrides: Partial<EngineTerms> = {},
+) {
   return {
     kind: "service" as const,
     scopeId,
-    service: "payments" as const,
-    terms: terms(effectiveFrom, effectiveTo),
+    services: ["payments"] as const,
+    terms: terms(effectiveFrom, effectiveTo, overrides),
   };
 }
 
@@ -223,6 +234,49 @@ describe("backtest", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it("evaluates every day of January 2026 when the contract started in 2023", () => {
+    const report = backtest({
+      outages: [outage("scopely", "PIR-JAN", "2026-01-10T00:00:00.000Z", 22)],
+      scopes: [
+        partner("scopely", [
+          payments("payments-sla", "2023-03-27T00:00:00.000Z", null, { target: 0.9995 }),
+        ]),
+      ],
+      through: new Date("2026-02-01T00:00:00.000Z"),
+    });
+
+    expect(report.partners[0]?.months.find((month) => month.month === "2026-01")).toMatchObject({
+      exposure: true,
+      days: 31,
+      scopes: [{ scopeId: "payments-sla", steps: 31, rules: { breaching: 0 } }],
+    });
+  });
+
+  it("prorates a mid-month effective date when it replays that month", () => {
+    const report = backtest({
+      outages: [outage("scopely", "PIR-JUNE", "2027-06-20T00:00:00.000Z", 15)],
+      scopes: [
+        partner("scopely", [
+          payments("payments-sla", "2027-06-15T00:00:00.000Z", null, { target: 0.9995 }),
+        ]),
+      ],
+      through: new Date("2027-07-01T00:00:00.000Z"),
+    });
+
+    const june = report.partners[0]?.months.find((month) => month.month === "2027-06");
+    expect(june).toMatchObject({
+      exposure: true,
+      days: 30,
+      scopes: [
+        {
+          scopeId: "payments-sla",
+          steps: 16,
+          rules: { breaching: 11, trend: 0, level: 0, meeting: 5 },
+        },
+      ],
+    });
   });
 
   it("has no import path to alerts or a Slack client", () => {

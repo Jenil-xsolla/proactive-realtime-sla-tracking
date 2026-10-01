@@ -4,7 +4,7 @@ import { PARTNERS, type PartnerId } from "@/registry";
 import type { SlaScope } from "@/terms";
 import { toBusinessView } from "./business";
 import { toIngestionCounts, toIngestionDetail } from "./ingestion";
-import { readIngestionHealth, readPartition, readTerms } from "./read";
+import { readIngestionHealth, readInvalidTerms, readPartition, readTerms } from "./read";
 import { toTechnicalView } from "./technical";
 import type { FeedSources, SlaFeed } from "./types";
 import type { Viewer } from "./viewer";
@@ -22,6 +22,7 @@ export async function getSlaFeed(input: {
   const partition = await readPartition(input.sources);
   const terms = readTerms(input.sources);
   const scopes = await scopesFor(terms, input.asOf);
+  const invalidTerms = await readInvalidTerms(terms);
   const evaluations = evaluate({
     outages: partition.usable,
     scopes,
@@ -49,6 +50,7 @@ export async function getSlaFeed(input: {
     role: input.viewer.role,
     rows: toTechnicalView(evaluations, partition.usable),
     ingestion: toIngestionDetail(ingestionResult),
+    invalidTerms,
   };
 }
 

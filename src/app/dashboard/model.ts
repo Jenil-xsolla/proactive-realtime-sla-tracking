@@ -59,6 +59,7 @@ export type HealthView = {
   unmatchedServiceNames: string[];
   partnersWithNoRows: string[];
   reasons: { key: string; label: string; count: number }[];
+  invalidTerms: { partner: string; label: string; message: string }[];
   ingestion: IngestionView;
 };
 
@@ -92,6 +93,8 @@ export type PartnerView = {
   id: string;
   name: string;
   trackingOnly: boolean;
+  /** `unknown` when the terms table could not be read. The row then offers neither action. */
+  contractTerms: "add" | "view" | "unknown";
   backtestTooltip: string;
   rows: ScopeView[];
 };
@@ -138,7 +141,11 @@ export function buildMonthOptions(asOf: Date, selectedKey: string): MonthOption[
     .reverse();
 }
 
-export function buildHealth(input: { health: SlaFeed["health"]; ingestion: IngestionHealthDetail }): HealthView {
+export function buildHealth(input: {
+  health: SlaFeed["health"];
+  ingestion: IngestionHealthDetail;
+  invalidTerms: readonly { partner: string; message: string }[];
+}): HealthView {
   return {
     usableCount: input.health.usableCount,
     droppedRows: input.health.unusableCount,
@@ -146,6 +153,11 @@ export function buildHealth(input: { health: SlaFeed["health"]; ingestion: Inges
     unmatchedServiceNames: input.health.unresolvedServiceNames,
     partnersWithNoRows: input.health.partnersWithZeroAttributedRows.map((id) => partnerLabel(id)),
     reasons: reasonEntries(input.health.countsByReason),
+    invalidTerms: input.invalidTerms.map((row) => ({
+      partner: row.partner,
+      label: partnerLabel(row.partner),
+      message: row.message,
+    })),
     ingestion: buildIngestionView(input.ingestion),
   };
 }
@@ -191,8 +203,13 @@ export function buildReadyDashboard(input: {
   asOf: Date;
   windowKey: string;
   feed: Extract<SlaFeed, { role: "technical" | "system" }>;
+  partnersWithTerms?: ReadonlySet<string> | null;
 }): Extract<DashboardModel, { state: "ready" }> {
-  const health = buildHealth({ health: input.feed.health, ingestion: input.feed.ingestion });
+  const health = buildHealth({
+    health: input.feed.health,
+    ingestion: input.feed.ingestion,
+    invalidTerms: input.feed.invalidTerms,
+  });
   return {
     state: "ready",
     asOfLabel: formatUtcTimestamp(input.feed.asOf),
@@ -204,8 +221,9 @@ export function buildReadyDashboard(input: {
     chip: healthChip({
       unusableCount: health.droppedRows,
       partnersWithNoRows: health.partnersWithNoRows.length,
+      invalidTerms: health.invalidTerms.length,
     }),
-    partners: buildPartnerGroups(input.feed.rows),
+    partners: buildPartnerGroups(input.feed.rows, input.partnersWithTerms ?? null),
   };
 }
 
@@ -213,6 +231,7 @@ export function buildUnavailableDashboard(input: {
   asOf: Date;
   windowKey: string;
   message: string;
+  partnersWithTerms?: ReadonlySet<string> | null;
 }): Extract<DashboardModel, { state: "unavailable" }> {
   return {
     state: "unavailable",
@@ -226,6 +245,7 @@ export function buildUnavailableDashboard(input: {
       id: partner.id,
       name: partner.displayName,
       trackingOnly: true,
+      contractTerms: contractTermsAction(partner.id, input.partnersWithTerms ?? null),
       backtestTooltip: BACKTEST_TRACKING_ONLY,
       rows: [
         {
@@ -257,7 +277,10 @@ export function buildBusinessViewerDashboard(input: {
   };
 }
 
-export function buildPartnerGroups(rows: readonly TechnicalRow[]): PartnerView[] {
+export function buildPartnerGroups(
+  rows: readonly TechnicalRow[],
+  partnersWithTerms: ReadonlySet<string> | null = null,
+): PartnerView[] {
   const byPartner = new Map<string, TechnicalRow[]>();
   for (const row of rows) {
     const list = byPartner.get(row.partner) ?? [];
@@ -269,24 +292,41 @@ export function buildPartnerGroups(rows: readonly TechnicalRow[]): PartnerView[]
   const groups: PartnerView[] = [];
   for (const partner of listPilotPartners()) {
     seen.add(partner.id);
-    groups.push(toPartnerView(partner.id, partner.displayName, byPartner.get(partner.id) ?? []));
+    groups.push(toPartnerView(partner.id, partner.displayName, byPartner.get(partner.id) ?? [], partnersWithTerms));
   }
   for (const [id, partnerRows] of byPartner) {
     if (seen.has(id)) {
       continue;
     }
-    groups.push(toPartnerView(id, partnerLabel(id), partnerRows));
+    groups.push(toPartnerView(id, partnerLabel(id), partnerRows, partnersWithTerms));
   }
   return groups;
 }
 
-function toPartnerView(id: string, name: string, rows: readonly TechnicalRow[]): PartnerView {
+function contractTermsAction(
+  id: string,
+  partnersWithTerms: ReadonlySet<string> | null,
+): PartnerView["contractTerms"] {
+  if (partnersWithTerms === null) {
+    return "unknown";
+  }
+  return partnersWithTerms.has(id) ? "view" : "add";
+}
+
+function toPartnerView(
+  id: string,
+  name: string,
+  rows: readonly TechnicalRow[],
+  partnersWithTerms: ReadonlySet<string> | null,
+): PartnerView {
   const trackingOnly = rows.every((row) => row.kind === "tracking_only");
+  const contractTerms = contractTermsAction(id, partnersWithTerms);
   if (rows.length === 0) {
     return {
       id,
       name,
       trackingOnly: true,
+      contractTerms,
       backtestTooltip: BACKTEST_TRACKING_ONLY,
       rows: [
         {
@@ -306,6 +346,7 @@ function toPartnerView(id: string, name: string, rows: readonly TechnicalRow[]):
     id,
     name,
     trackingOnly,
+    contractTerms,
     backtestTooltip: trackingOnly ? BACKTEST_TRACKING_ONLY : BACKTEST_NOT_ON_SCREEN,
     rows: rows.map((row, index) => toScopeView(id, row, index)),
   };
