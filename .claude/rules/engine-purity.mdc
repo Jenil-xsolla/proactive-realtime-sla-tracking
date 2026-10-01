@@ -1,0 +1,21 @@
+---
+description: The evaluation engine stays pure and clock-free
+globs: "src/engine/**"
+alwaysApply: false
+---
+
+# Engine purity
+
+- No framework, database, or I/O imports. `src/engine` receives plain objects and returns plain objects.
+- `evaluate()` and everything it calls take an explicit `asOf` parameter. Every time-dependent value derives from that argument.
+- Never call `new Date()` inside `src/engine` for any reason.
+
+```ts
+// ❌ BAD — clock access inside the engine
+const asOf = new Date();
+
+// ✅ GOOD — the caller supplies the instant
+function evaluate(input: { asOf: Date }) {
+  return input.asOf;
+}
+```

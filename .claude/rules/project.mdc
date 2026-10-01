@@ -1,0 +1,14 @@
+---
+description: What this system is and the rules that keep an evaluation honest
+alwaysApply: true
+---
+
+# SLA tracking
+
+This system tracks production performance against partner SLAs in real time, so a partner heading for a breach is visible before it happens. Evaluation runs on every read from outage records and contract terms; the only persisted state is alert deduplication.
+
+Every partner is tracking-only today. There are no SLA terms anywhere in the system, and no status, target, or penalty figure may be invented or defaulted.
+
+Dashboard and alerts must call the same evaluation function. Never write a second implementation of the maths.
+
+Every route handler and server component sets `export const dynamic = 'force-dynamic'` and fetches with `no-store`. Next.js caches by default, and a stale evaluation fails invisibly by showing plausible wrong numbers.

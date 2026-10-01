@@ -1,7 +1,8 @@
 # Proactive SLA Tracking — Dashboard and Evaluation Engine
 
-**Status:** design agreed, not yet built
-**Date:** 2026-09-21
+**Status:** design agreed; slice one partly built
+**Date:** 2026-09-21, revised 2026-09-28 for in-app ingestion
+**Companion design:** `specs/2026-09-25-ingestion-in-app-design.md` (ingestion, corrections, deployment). Where the two overlap on ingestion, the companion is more detailed.
 **Epic:** GTOC-30
 **Authority on measurement rules:** [SLA Metric Definitions and Measurement Rules](https://xsolla.atlassian.net/wiki/spaces/PS4/pages/25124733898)
 
@@ -13,7 +14,7 @@ Suggested location in repo: `specs/sla-dashboard-spec.md`
 
 Track, in real time, how production performance measures against SLAs contractually committed to partners — so that a partner heading for a breach is visible days before it happens rather than surfaced afterwards by the partner.
 
-This spec covers six subsystems:
+This spec covers seven subsystems:
 
 
 | #   | Subsystem                           | Slice                                     |
@@ -24,6 +25,7 @@ This spec covers six subsystems:
 | 4   | Alerting                            | One                                       |
 | 5   | Business (CSM) view                 | One-and-a-half — gated on real terms only |
 | 6   | Contract upload and term extraction | Two — gated on OQ-1                       |
+| 7   | Ingestion and corrections           | One — detailed in the companion design    |
 
 
 Slice one is independently useful and shippable. The business view follows as soon as real contracts land; it is deliberately not bundled with upload and extraction, which carry an unresolved governance dependency.
@@ -34,17 +36,19 @@ Slice one is independently useful and shippable. The business view follows as so
 
 ## 2. Context and constraints
 
-**What exists already.** A Postgres database (Supabase) with an `sla_outages` table, written by an n8n ingestion pipeline that triggers on PIR approval in Jira, attributes affected partners using a language model, and routes records through human review in Slack before writing. Idempotency key is `(pir_key, partner)`.
+**What exists already.** The app's engine, feed, technical view and alerting. A test Postgres database. Production is PostgreSQL on GCP (Cloud SQL), requested through the Production Postgres ADR.
+
+**Ingestion is part of the app.** Until 2026-09-28 an n8n workflow wrote `sla_outages`, using a language model for partner attribution and a Slack approval step before writing. n8n cloud is no longer available at Xsolla, so ingestion now lives in `src/ingestion/`: it triggers on PIR approval in Jira, resolves partners by registry lookup with no model, writes immediately, and posts each capture to Slack with a Correct button. Idempotency key is still `(pir_key, partner, affected_service)`.
 
 **What is being added.** Historical incident data from `2026-01-01`, imported from a maintained spreadsheet. No availability data exists before that date.
 
 **What does not exist.** SLA terms. No partner has a contractual target, allowance, status, or penalty exposure held in any system. All eleven pilot partners are tracking-only at build time.
 
-**Design system.** Not a package. The visual language has been extracted into `.cursor/rules/`, so the app owns its own theme and components and has no design-system dependency to install or import.
+**Design system.** Not a package. The visual language lives in the agent rules files (`.claude/rules/` for Claude Code), so the app owns its own theme and components and has no design-system dependency to install or import.
 
-**Repo state at build time.** Empty apart from `README.md`, this spec at `specs/sla-dashboard-spec.md`, and `.cursor/rules/`. Everything else is created by the prompts below.
+**Specs.** This spec and the companion design both live in `specs/` at the repo root.
 
-**Data boundary.** The application reads two things: the `sla_outages` table, and contract terms. It makes no call to Jira, no service-catalogue lookup, and no request to any other system. A PIR key renders as a constructed URL, never a fetch.
+**Data boundary.** The dashboard service reads two things: the database and contract terms. It makes no call to Jira. The ingestion service is the only part of the app that calls outside systems: it reads the PIR and its linked incident from the Jira REST API and posts to Slack. A PIR key on the dashboard renders as a link to the stored `pir_url`, never a fetch.
 
 **Constraint that shapes everything:** the engine's output is a function of terms that do not yet exist. The system must be fully built, testable and useful without them, and must gain scoring behaviour when they arrive without a rewrite.
 
@@ -56,9 +60,11 @@ Slice one is independently useful and shippable. The business view follows as so
 
 
 
-### AD-1 — Next.js App Router, TypeScript, single deployable
+### AD-1 — Next.js App Router, TypeScript, one codebase, two Cloud Run services
 
-Next.js avoids standing up a second service to reach Postgres, and server components make server-side permission enforcement the default path rather than something to remember. A single app at repo root — no workspace, no packages.
+Next.js keeps the backend and the UI in one app, and server components make server-side permission enforcement the default path rather than something to remember. A single app at repo root, no workspace, no packages.
+
+The image is built once and deployed twice, selected by `SERVICE_ROLE`: `sla-ingestion` with public ingress, serving only the Jira ingestion endpoint and Slack interactions, and `sla-dashboard` with internal ingress, serving everything else. Cloud Run ingress applies to a whole service, and the dashboard has no authentication yet, so it cannot share a public service. Middleware is deny-by-default, and a missing or unknown `SERVICE_ROLE` stops the app at startup.
 
 ### AD-2 — Compute on read; persist only alert state
 
@@ -66,7 +72,7 @@ Evaluation runs on every request rather than being materialised on a schedule.
 
 Rationale: `sla_outages` rows are mutable by design — upserted by key, and correctable by a human reviewer after the fact. Snapshots of mutable source data go stale silently. At eleven partners the recomputation cost is negligible.
 
-The only persisted state is `sla_alert_state`, holding what alerting needs for deduplication.
+The only evaluation state persisted is `sla_alert_state`, holding what alerting needs for deduplication. The ingestion tables (`sla_pir_reviews`, `sla_outage_corrections`) are records of what came in and what people changed, not evaluation output.
 
 Rejected: materialised evaluation snapshots (staleness, re-evaluation orchestration on every correction). Accepted cost: no point-in-time record of what the system believed on a past date. Mitigation if needed later is an append-only log written by the alert job, additive and not touching the read path.
 
@@ -90,21 +96,29 @@ This is the single most load-bearing detail in the design. Without it, historica
 
 Payload shaping happens on the server in two serialisers, not by conditional rendering in the client. The business payload never contains ticket keys, so they cannot leak through a missed conditional.
 
-### AD-6 — No provisional data reaches any screen; terms arrive by committed file
+### AD-6 — No provisional data reaches any screen; terms are entered through the dashboard
 
-No invented or provisional SLA target exists anywhere in the running system. `EmptyTermsProvider` returns no scopes until real terms exist.
+No invented or provisional SLA target exists anywhere in the running system. A partner with no active terms returns no scopes and stays tracking-only.
 
-Fixture terms exist for engine tests only. There is no development mode that renders a scored dashboard from fabricated numbers — the scored UI is built when the first real contract lands, against that contract.
+Fixture terms exist for engine tests only, and use illustrative figures, never a real contract's. There is no development mode that renders a scored dashboard from fabricated numbers.
 
-First real terms arrive as a hand-authored file committed to the repo and read by `StaticTermsProvider`. Human entry plus pull-request review satisfies the confirmation gate in §12.2 without a bespoke review UI. Contract upload and model extraction (slice two) become a convenience for onboarding at scale, not a prerequisite for scoring.
+**Contract terms are confidential and are never committed to the repository**, in code, tests, fixtures or this spec. The repository is on GitHub. Terms live in the database, entered through a form in the dashboard (§6.6). A one-off seed script may load an initial set from a gitignored local file. *Revised 2026-09-28; replaces committed term files.*
 
 ### AD-7 — Alerting fires on transition only; the app sends
 
 Status transitions trigger alerts; steady state writes and sends nothing. This delivers "one alert per situation" without separate rate-limiting logic.
 
-The app posts to Slack itself rather than returning alerts for n8n to deliver. Reason: the state write and the send must succeed together. If delivery is external, state must be written before delivery is known to have succeeded — producing a row claiming an alert was sent to a person who was never told, permanently, because transition-based alerting will not retry.
+The app posts to Slack itself rather than handing alerts to another system to deliver. Reason: the state write and the send must succeed together. If delivery is external, state must be written before delivery is known to have succeeded — producing a row claiming an alert was sent to a person who was never told, permanently, because transition-based alerting will not retry.
 
-n8n is a scheduler only. It holds no SLA logic and touches no SLA data. Any scheduler substitutes without design change.
+Two things trigger an alert run, and neither holds SLA logic: Cloud Scheduler at 01:00 and 13:00 UTC, and the ingestion service after every capture or correction. A delivery counts only when Slack's response body says `ok: true`; Slack returns HTTP 200 even for failed posts.
+
+### AD-8 — Ingestion is in the app, write first, correct any time
+
+The affected-merchants field holds partner names or merchant IDs, so attribution is a registry lookup, merchant ID first. No model is involved and nothing is guessed: an unmatched value is flagged and produces no row.
+
+Rows are written immediately as `system_written` and posted to Slack channel `C0BUT8U637Y`. A Correct button stays usable indefinitely. A correction replaces the PIR's rows as a set, marks them `human_corrected` with the reviewer's name, and is recorded with before and after values. This replaced the earlier approve-before-write step, which only made sense while a model was proposing attributions.
+
+Full design: the companion document.
 
 ---
 
@@ -117,11 +131,15 @@ Single Next.js application at repo root.
 ```
 /
 ├── README.md
-├── specs/sla-dashboard-spec.md
-├── .cursor/rules/
-│   ├── project.mdc          alwaysApply, short
-│   ├── design.mdc           globs: src/**/*.tsx  (existing — visual language)
-│   └── engine-purity.mdc    globs: src/engine/**
+├── CLAUDE.md
+├── specs/
+│   ├── sla-dashboard-spec.md
+│   └── 2026-09-25-ingestion-in-app-design.md
+├── .claude/rules/
+│   ├── project.md           no paths, always loaded
+│   ├── design.md            paths: src/**/*.tsx
+│   ├── engine-purity.md     paths: src/engine/**
+│   └── ingestion.md         paths: src/ingestion/**
 ├── src/
 │   ├── engine/    types, evaluate, status, penalty, intervals, constants
 │   ├── data/      drizzle schema, outages, alert-state, health
@@ -129,13 +147,14 @@ Single Next.js application at repo root.
 │   ├── terms/     provider interface, empty impl, fixture impl
 │   ├── feed/      viewer, composition, business/technical serialisers
 │   ├── alerts/    transition detection, message builders, slack client
+│   ├── ingestion/ jira fetch, resolution, capture message, corrections, writer
 │   ├── ui/        themed primitives (table, badge, card, bar)
 │   └── app/       routes and pages
 ├── scripts/backtest.ts
 └── tests/
 ```
 
-**Dependency direction points inward.** `engine/` depends on nothing. `feed/` is the only module that composes data, registry, terms and engine. Routes call `feed/` and nothing beneath it. `alerts/` calls `feed/` and `data/`, never the engine directly.
+**Dependency direction points inward.** `engine/` depends on nothing. `feed/` is the only module that composes data, registry, terms and engine. Routes call `feed/` and nothing beneath it. `alerts/` calls `feed/` and `data/`, never the engine directly. `ingestion/` uses the registry and its own writer, and only `ingestion/` may import that writer or the ingestion database client; ESLint enforces it.
 
 ---
 
@@ -145,46 +164,51 @@ Single Next.js application at repo root.
 
 
 
-### 5.0 Actual `sla_outages` schema (observed 2026-09-22)
+### 5.0 `sla_outages` schema
 
-Confirmed from live rows, not assumed. The dashboard mirrors this read-only.
+Created by the app's migrations. The dashboard service reads it; only the ingestion service writes it.
 
 
 | Column             | Type        | Notes                                                                                                                                                              |
 | ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `id`               | int         | surrogate key                                                                                                                                                      |
-| `pir_key`          | text        | e.g. `GTO-543`; part of the pipeline's idempotency key                                                                                                             |
-| `partner`          | text        | resolved partner display name, human-approved; a display convenience that can drift                                                                                |
-| `partner_id`       | **text**    | **already present.** The external *merchant id* (e.g. `"506855"`), not a FK. Authoritative partner identity per the attribution step. String, so parse at the edge |
+| `pir_key`          | text        | e.g. `GTO-543`; part of the idempotency key                                                                                                                        |
+| `partner`          | text        | resolved partner display name; a display convenience that can drift                                                                                               |
+| `partner_id`       | **text**    | **already present.** The external *merchant id* (e.g. `"506855"`), not a FK. Authoritative partner identity. String, so parse at the edge |
 | `incident_started` | timestamptz | UTC                                                                                                                                                                |
 | `affected_service` | text        | free text, needs canonical resolution                                                                                                                              |
 | `outage_minutes`   | numeric     | **returns as a string** from node-postgres                                                                                                                         |
 | `severity`         | text        | free text, e.g. `L1 — Critical`; needs canonical resolution                                                                                                        |
-| `reviewed_by`      | text        | reviewer identity — engineer/audit detail                                                                                                                          |
-| `decision_type`    | text        | e.g. `ai_approved` — human-review provenance                                                                                                                       |
-| `reason`           | text        | reviewer note; usually empty. **Not mapped**                                                                                                                       |
-| `reviewed_at`      | timestamptz |                                                                                                                                                                    |
-| `pir_url`          | text        | constructed Jira link                                                                                                                                              |
-| `ai_reasoning`     | text        | batch-level attribution narrative across all partners, including which partners had **no** matches. **Not mapped**                                                 |
+| `reviewed_by`      | text        | Slack username of the last corrector; set only when `human_corrected` |
+| `decision_type`    | text        | `system_written` or `human_corrected`; null only for backfill rows |
+| `reason`           | text        | reason given in the correction form. **Not mapped** in the dashboard; the correction history is the audit record |
+| `reviewed_at`      | timestamptz | time of the last correction |
+| `pir_url`          | text        | stored Jira link, used as the href of the PIR key |
+| `source`           | text        | `pipeline` or `backfill` |
 
 
-**Two fields are deliberately not mapped.** `ai_reasoning` and `reason` are pipeline audit fields. `ai_reasoning` is a batch-level narrative describing an entire attribution run across all partners, not a per-row explanation, and carries merchant IDs and internal project names. Neither has per-row evaluation value. Both remain in the table as the contemporaneous attribution audit record — valuable in a future penalty dispute — but are read by nobody in this application. Stored, not wired.
+**`ai_reasoning` was dropped on 2026-09-28** along with the language model that produced it. Nothing in the app referred to it.
 
-**Not to be confused with the engine's** `StatusReason`**.** That is computed by the engine, explains why a scope holds its status, and is unrelated to these ingestion fields. See §7.6.
+**Not to be confused with the engine's** `StatusReason`**.** That is computed by the engine, explains why a scope holds its status, and is unrelated to the `reason` column.
 
-**Fields with no per-row confidence signal.** Attribution has already been resolved to a `partner` string upstream. There is no per-row match-method or confidence column, so the technical view shows no attribution-confidence indicator — there is no data behind it. `decision_type` (`ai_approved` vs. a human correction) is the available provenance signal and is shown instead.
+**Provenance per row.** There is no attribution-confidence column, because attribution is a deterministic lookup. `decision_type` (`system_written` or `human_corrected`) and `source` (`pipeline` or `backfill`) are the provenance signals the technical view shows.
 
-**Absent columns to note.** No `source` discriminator yet (see §5.2). No `incident_resolved` — duration is `outage_minutes` alone, as intended.
+**No `incident_resolved` column.** Duration is `outage_minutes` alone, as intended.
 
-**The partners-with-zero-rows health check is derived, not parsed.** `ai_reasoning` names the partners that had no matches in a run, but the health panel must compute "registry partners with zero attributed rows this period" structurally from the resolved rows, never by reading names out of the `ai_reasoning` prose. The prose format is model-controlled and may change; the health signal must not depend on it.
+**The partners-with-zero-rows health check is derived from resolved rows.** "Registry partners with zero attributed rows this period" is computed structurally, never read out of any message text.
 
 ### 5.1 Ownership
 
-`sla_outages` is owned by the n8n pipeline. The dashboard declares a Drizzle table definition mirroring the existing schema for reading only, and generates no migrations against it.
+The repo owns the whole schema through its migrations: `sla_outages`, `sla_alert_state`, `sla_pir_reviews` and `sla_outage_corrections`.
 
-The application should connect using a Postgres role with `SELECT` on `sla_outages` and write access only to its own tables. The boundary is then enforced by the database rather than by convention.
+Each service connects with its own database user, so the boundary is enforced by the database rather than by convention:
 
-### 5.2 Schema additions owned by the dashboard
+| User | Service | Access |
+| --- | --- | --- |
+| `ingestion_writer` | `sla-ingestion` | SELECT/INSERT/UPDATE/DELETE on `sla_outages` (DELETE because a correction can remove a partner); SELECT/INSERT/UPDATE on `sla_pir_reviews`; SELECT/INSERT on `sla_outage_corrections` |
+| `app_user` | `sla-dashboard` | SELECT on `sla_outages`, `sla_pir_reviews`, `sla_outage_corrections`; SELECT/INSERT/UPDATE on `sla_alert_state` and `sla_contract_terms` |
+
+### 5.2 Other tables
 
 ```sql
 sla_alert_state (
@@ -199,9 +223,23 @@ sla_alert_state (
 )
 ```
 
-One `sla_outages` column remains a pipeline-owned change the dashboard depends on: a `source` column (`backfill` | `pipeline`), required before backfill import so the two provenances are distinguishable.
+`sla_pir_reviews` (one row per PIR received, with its processing status) and `sla_outage_corrections` (one row per correction, with before and after values) are defined in the companion design and the Production Postgres ADR.
 
-The authoritative merchant id is already written by the pipeline as `partner_id` (text). No addition needed — the dashboard reads it as the identity key. Its column name resembles a foreign key but it is an external merchant id; the mirror should comment this to prevent a later false join assumption.
+`sla_contract_terms` holds each partner's current terms, one row per partner. There is no history table: an edit overwrites the previous figures, and the row records only who made the last change and when. *Decided 2026-09-28.*
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `partner_slug` | text, primary key | registry slug, e.g. `second-dinner`. Named like `sla_alert_state.partner_slug`, not `partner_id`, which in `sla_outages` is a merchant ID |
+| `lifecycle` | text not null | `terms_pending_review` or `contract_bound` |
+| `terms` | jsonb not null | the contract-file shape of §6.3 |
+| `version` | integer not null | starts at 1, incremented on every save; a save against a stale version is refused |
+| `updated_by` | text not null | editor name from the form |
+| `updated_at` | timestamptz not null | |
+| `created_at` | timestamptz not null | |
+
+A check constraint limits `lifecycle` to its two values. `pnpm db:migrate` creates it with the other four tables.
+
+`partner_id` is written by ingestion as the external merchant id (text). Its column name resembles a foreign key but it isn't one; the schema should comment this to prevent a later false join assumption.
 
 ### 5.3 Four traps that must be handled explicitly
 
@@ -213,7 +251,7 @@ The authoritative merchant id is already written by the pipeline as `partner_id`
 
 **Free-text values require canonical resolution.** Partner names, service names and severity labels all arrive as free text and will not match across sources. The registry holds each pilot partner (with its `merchantIds` list and name aliases), each SLA-relevant service, and each severity level with its variants.
 
-Partner resolution is `partner_id` **first, name second.** `partner_id` holds the external merchant id (a string, e.g. `"506855"`) and is the authoritative match — the attribution step marks it authoritative. Parse it to an integer once at the data-layer edge and match against the registry's `merchantIds` list. The free-text `partner` name is the fallback only for rows without a `partner_id`, such as historical backfill. Where `partner` and `partner_id` disagree, `partner_id` wins. `merchantIds` is modelled as a list per partner, since a partner may span several merchant accounts.
+Partner resolution is `partner_id` **first, name second.** `partner_id` holds the external merchant id (a string, e.g. `"506855"`) and is the authoritative match. Parse it to an integer once at the data-layer edge and match against the registry's `merchantIds` list. The free-text `partner` name is the fallback only for rows without a `partner_id`, such as historical backfill. Where `partner` and `partner_id` disagree, `partner_id` wins. `merchantIds` is modelled as a list per partner, since a partner may span several merchant accounts.
 
 Unresolved values go to the health output and are excluded from evaluation — never silently dropped, never creating a phantom partner.
 
@@ -269,26 +307,87 @@ type SlaScope =
 
 Under `true`, one incident can breach two scopes and generate two credits, which makes the per-contract aggregate cap load-bearing rather than theoretical.
 
+**A scope names one or more registry service IDs.** One service is the common case. Several services means one combined target across all of them, as when a contract sets a single figure for "the Xsolla systems" it lists. The registry is built from every service in Jira, so contract services map onto it directly. The field is typed as the registry's ID union, so a typo fails to compile instead of silently matching no outages.
+
+**Services that include other services.** `webshop` is both a Jira service in its own right and a product made of `igs-bb`, `subscriptions` and `shop-builder`. Its entry in `src/registry/services.ts` carries `includes: ['igs-bb', 'subscriptions', 'shop-builder']`. A scope naming `webshop` counts outages recorded against Webshop itself or any included service. The terms loader expands each scope into the full set of service IDs (every named service plus anything it includes) before the engine sees it, so the engine never imports the registry. Overlapping outages within the scope are merged by the normal rule (§7.3): overlap counts once, plus the extra from each service.
+
+| | IGS-BB | Subscriptions | `webshop` scope counts |
+| --- | --- | --- | --- |
+| Outage | 10:00–10:30 | 10:20–10:50 | 10:00–10:50 |
+| Minutes | 30 | 30 | 50 |
+
 ### 6.3 Terms type
 
+*Revised 2026-09-28 against the first real contracts and the code as built.*
+
+**Two shapes, one conversion.** Terms are entered in the contract's own terms, through the form or the seed script: percentages as written, tiers as at-or-above bands, a penalty kind. The terms loader converts it once, in one tested function, into the engine's existing `SlaScope` and `SlaTerms` (fractions, `belowAvailability` tiers). The engine's units do not change.
+
 ```ts
-interface SlaTerms {
-  target: number                 // 0.999
-  window: 'calendar_month'
-  timezone: string               // 'UTC' default, declared explicitly
-  effectiveFrom: Date            // contract date, never upload date
-  effectiveTo: Date | null
-  exclusions: ExclusionClass[]
-  penaltyTiers: PenaltyTier[]
-  perScopeCap: number | null
-  contractAggregateCap: number | null
-  minimumCountableOutageMinutes: number | null
-  sourceClause: string           // clause reference for every figure
-  monthlyFee: Money | null       // absent means percentage-only reporting
+// What the form saves, stored as JSON in sla_contract_terms
+interface ContractFile {
+  partner: PartnerId
+  lifecycle: 'terms_pending_review' | 'contract_bound'
+  effectiveFrom: string            // from the contract
+  effectiveTo: string | null
+  scopes: ContractScope[]
+  contractAggregateCap: number | null   // percent
+}
+
+interface ContractScope {
+  kind: 'service' | 'catch_all'
+  scopeId: string
+  services?: ServiceId[]           // kind 'service' only; one or more, one combined target
+  includesScopedServices?: boolean // kind 'catch_all' only, from contract text
+  target: number                   // percent, e.g. 99.95
+  penalty: Penalty
+  sourceClause: string
+}
+
+type Penalty =
+  | { kind: 'none' }               // the contract has no penalty for this scope
+  | { kind: 'not_entered' }        // a penalty exists but its figures aren't entered yet
+  | { kind: 'tiers'
+      tiers: { atOrAbove: number; credit: number }[]  // percent; highest first; last atOrAbove is 0
+      perScopeCap: number | null }                    // percent
+```
+
+**Converting tiers.** At-or-above bands become the engine's below-threshold tiers by shifting each band's credit onto the band above's threshold: "at or above 99.50, 5%" under "at or above 99.95, 0%" becomes "below 99.95%, 5%".
+
+**Tier rules.**
+
+- Credit never under-reports: a month that falls short of a band's threshold by any amount, however small, is in the lower band. *Decided 2026-09-28.* Because contract thresholds sit on the same grid as the bands, this is the same result as truncating uptime to the contract's precision, so no precision field is needed.
+- Comparisons are exact. Floating-point uptime can land just below a threshold it actually meets: in a 29-day month, an exact 99.50% computes as 99.4999…. The engine compares downtime against each tier's threshold in exact arithmetic.
+- Tiers run highest first and the last `atOrAbove` is `0`, so every month matches exactly one tier. The loader rejects a file that breaks this.
+
+**Contract names versus registry names.** Contracts can name a service differently from Jira. Pay Station is filed in Jira as `payments`, so a Pay Station scope names `service: 'payments'`, with the contract's own wording in `sourceClause`. Add any further mapping here as contracts reveal it.
+
+**Worked example (illustrative figures, not a real contract).** One service, 99.95% target, calendar month, credits as a reduction of fees:
+
+```ts
+penalty: {
+  kind: 'tiers',
+  perScopeCap: null,
+  tiers: [
+    { atOrAbove: 99.95, credit: 0 },
+    { atOrAbove: 99.50, credit: 5 },
+    { atOrAbove: 99.00, credit: 10 },
+    { atOrAbove: 0,     credit: 25 },
+  ],
 }
 ```
 
-`sourceClause` exists from the start because GTOC-41 requires every figure to trace to contract language and retrofitting provenance is painful.
+At 99.95% in a 30-day month the allowance is 21.6 minutes, and a contract shaped like this goes from 0% to its first credit in a single step. The early-warning value is concentrated in that first cliff.
+
+`sourceClause` is required on every scope, because GTOC-41 requires every figure to trace to contract language.
+
+### 6.3a Effective dates and exclusions
+
+**Evaluation starts at the later of `effectiveFrom` and 2026-01-01.** *Decided 2026-09-28.*
+
+- A contract effective before 2026-01-01 is evaluated in full calendar months from January 2026.
+- A contract effective later starts on its own date. If that falls mid-month, the first window runs from `effectiveFrom` to the end of that month: the allowance is prorated to the shorter window, only outages from `effectiveFrom` onwards count, and the penalty tier is chosen against the shorter window. A contract effective 15 June 2027 at 99.95% has an allowance of 11.52 minutes for June, not 21.6.
+
+**No exclusions in the terms.** Scheduled maintenance and other excluded events never become Jira tickets, so they never become outage rows, and there is nothing for the engine to exclude. *Decided 2026-09-28.*
 
 ### 6.4 Lifecycle
 
@@ -296,20 +395,35 @@ interface SlaTerms {
 | State                  | Engine behaviour                                                             |
 | ---------------------- | ---------------------------------------------------------------------------- |
 | `tracking_only`        | Downtime recorded and reported. No target, status or exposure.               |
-| `terms_pending_review` | Identical to `tracking_only`. Unconfirmed terms are invisible to the engine. |
+| `terms_pending_review` | A saved draft. Identical to `tracking_only`; invisible to the engine.        |
 | `contract_bound`       | Full evaluation.                                                             |
 
 
-Only `contract_bound` scopes are returned by `listScopes`.
+Only `contract_bound` scopes are returned by `listScopes`. In the form, **Save draft** writes `terms_pending_review` and **Activate** writes `contract_bound`; activation is a separate, deliberate step so a half-entered contract never scores.
 
 ### 6.5 Implementations
 
-- `EmptyTermsProvider` — returns `[]` unconditionally. Production, until the first contract is entered.
-- `StaticTermsProvider` — reads `src/terms/contracts/` , a directory of hand-authored, PR-reviewed term files. Production, from the first contract onward. Only files marked `contract_bound` are returned.
-- `FixtureTermsProvider` — reads from `tests/fixtures/`; throws on import when `NODE_ENV === 'production'`. Engine tests only. Never wired to a route or a page.
-- `DbTermsProvider` — reads confirmed terms written by the extraction flow. Slice two, optional.
+- `DbTermsProvider` — reads `sla_contract_terms` and converts each partner's terms through the same validated function the form uses. Production.
+- `EmptyTermsProvider` — returns `[]` unconditionally. Tests.
+- `StaticTermsProvider` — reads in-memory term files. Tests and the illustrative example only; never real contracts.
+- `FixtureTermsProvider` — reads from `tests/fixtures/`; throws on import when `NODE_ENV === 'production'`. Engine tests only.
 
 Swapping provider is one line of composition in `feed/`. Nothing else changes.
+
+### 6.6 Contract terms form
+
+In the technical view, each partner offers **Add contract terms** when none exist, or **View terms** with an **Edit** button when they do. The form edits the contract-file shape of §6.3:
+
+- effective from and to
+- one or more scopes, each with the services it covers (picked from the registry), target %, and for a general target whether specific-service outages also count against it
+- penalty: none, not entered, or tiers (at-or-above % and credit %, validated as entered)
+- source clause per scope
+
+Validation is the loader's validation (§6.3), run on the server before anything is saved. **Save draft** and **Activate** are separate actions. Every save increments the version. The form carries the version it opened with, and a save against a newer version is refused, so two editors can't overwrite each other unnoticed.
+
+**Who changed it.** The dashboard has no sign-in yet, so every save requires an editor name, stored as `updated_by` on the row. This is weak, since it is typed rather than verified, and is replaced by the signed-in identity once the dashboard sits behind SSO (open question 4).
+
+The routes live on `sla-dashboard` only; `sla-ingestion`'s deny-by-default proxy returns 404 for them.
 
 ---
 
@@ -403,10 +517,18 @@ export const WINDOW_TIMEZONE = 'UTC'
 
 Two figures, never summed into one headline:
 
-- **incurred** — from minutes actually consumed
-- **projected** — from where current burn rate lands at window close
+- **incurred**, from minutes actually consumed
+- **projected**, from where the current burn rate lands at window close
 
-Both derive from matching downtime against the tier table and taking the worst tier crossed, then applying per-scope and contract-aggregate caps. Percentages always; currency only where `monthlyFee` exists.
+Each comes from the scope's `penalty`:
+
+- `tiers`: compare the window's downtime against each tier's threshold in exact arithmetic, take the tier it falls into, then apply the per-scope and contract-aggregate caps.
+- `none`: no penalty. Reported as "no penalty clause," not as 0%.
+- `not_entered`: **unknown**. Reported as "penalty clause, not yet entered," never as 0%. A zero would tell a CSM that nothing is at stake.
+
+Percentages always; currency only where a monthly fee is known.
+
+A scope can be *breaching* its target while still in a 0% tier only if the contract's first tier starts below its target. The UI shows both facts rather than reconciling them.
 
 CSM alerts quote projected; Legal cares about incurred. Conflating them produces either false alarm or understated breach.
 
@@ -447,10 +569,12 @@ Loads outages, resolves identities, fetches scopes, calls `evaluate()`, shapes b
 | ------------------------------- | --------------------------------------------------------- |
 | `GET /api/sla/feed`             | Dashboard data                                            |
 | `GET /api/sla/health`           | Unusable rows, unresolved names, missing fields (GTOC-45) |
-| `POST /api/internal/alerts/run` | Scheduled alert evaluation                                |
+| `POST /api/internal/alerts/run` | Alert evaluation, called by Cloud Scheduler and by ingestion |
+| `POST /api/ingest/pir-approved` | Jira Automation webhook; `sla-ingestion` only              |
+| `POST /api/slack/interactions`  | Slack Correct button and modal; `sla-ingestion` only        |
 
 
-The internal route triggers writes and sends messages. It requires a shared-secret header checked in the route itself, not VPN placement alone.
+The internal route triggers writes and sends messages. It requires a shared-secret header checked in the route itself, not VPN placement alone. The two ingestion routes are the only paths `sla-ingestion` answers; every other path returns 404 there. The Jira route checks a shared secret, and the Slack route verifies Slack's signing secret on the raw body and rejects timestamps older than five minutes.
 
 ### 8.4 Caching — mandatory
 
@@ -484,7 +608,7 @@ This is the first place anyone can see partner-attributed downtime across all pi
 
 - **Header** — window selector, `asOf` timestamp, data-health chip
 - **Main** — table grouped by partner, one row per scope
-- **Expanded row** — one line per contributing outage, newest first: PIR key linking to `pir_url`, UTC start, computed end, minutes, canonical service (with the raw value when it differs), canonical severity, `decision_type` and `reviewed_by` with `reviewed_at`, `partner_id`, and `source` provenance once that column exists. A boundary-crossing outage shows both full duration and minutes counted in this window; merged overlaps are visibly grouped. A reconciliation line — outages and minutes counted — must equal the collapsed row's total. `ai_reasoning` and `reason` are never shown.
+- **Expanded row** — one line per contributing outage, newest first: PIR key linking to `pir_url`, UTC start, computed end, minutes, canonical service, canonical severity, `decision_type` and `reviewed_by` with `reviewed_at`, `partner_id`, and `source` provenance. A boundary-crossing outage shows both full duration and minutes counted in this window; merged overlaps are visibly grouped. A reconciliation line — outages and minutes counted — must equal the collapsed row's total. `reason` is not shown; corrections are made in Slack, not on this screen.
 - **Backtest control** — per partner, runs historical replay once terms bind (see §11)
 
 When terms land, scored rows gain a budget bar and status badge in the same table. No second screen.
@@ -499,7 +623,7 @@ When terms land, scored rows gain a budget bar and status badge in the same tabl
 
 ### 9.4 Theming
 
-The visual language lives in `.cursor/rules/design.mdc`. That file is authoritative; where it and this spec disagree, it wins.
+The visual language lives in `.claude/rules/design.md`. That file is authoritative; where it and this spec disagree, it wins.
 
 The app owns its own theme. Design tokens are defined once as CSS custom properties and consumed through Tailwind config. Components live in `src/ui/` and are built against those tokens.
 
@@ -519,6 +643,7 @@ The app owns its own theme. Design tokens are defined once as CSS custom propert
 
 ### 10.1 Flow
 
+Cloud Scheduler, or the ingestion service after a capture or correction →
 `POST /api/internal/alerts/run` →
 `getSlaFeed({ asOf: now })` →
 for each scored scope, compare status against `sla_alert_state` →
@@ -528,7 +653,7 @@ Same status as last run: nothing written, nothing sent. Recovery downgrades stor
 
 ### 10.2 Write ordering
 
-State is written **after** Slack returns success. A failed send therefore retries naturally on the next run rather than leaving a row claiming someone was warned who was not.
+State is written **after** Slack returns `ok: true` in the response body; HTTP 200 alone is not delivery. A failed send therefore retries naturally on the next run rather than leaving a row claiming someone was warned who was not.
 
 ### 10.3 Concurrency
 
@@ -548,7 +673,7 @@ The lighter "unusually bad month" heads-up from GTOC-46, computed against that p
 
 ### 10.6 Scheduling
 
-An n8n workflow on a timer makes one authenticated POST. It contains no SLA logic, no branching, and touches no SLA data. Separate from the ingestion workflow, sharing only the platform.
+Cloud Scheduler calls `/api/internal/alerts/run` at 01:00 and 13:00 UTC. That catches changes driven by time alone, such as a scope crossing an elapsed-time floor with no new outage. The ingestion service also calls it after every capture or correction, so new data is evaluated immediately. Transition-only firing and compare-and-swap make overlapping calls harmless. n8n is no longer used.
 
 ---
 
@@ -586,7 +711,7 @@ The UI shows processing state during extraction.
 
 A model extraction is a draft, never an authority. A target misread as 99.9% instead of 99.95% doubles the monthly allowance and every downstream figure with it, in the direction favouring Xsolla, and surfaces in a partner dispute.
 
-This mirrors the human-review gate already applied to incident attribution in the ingestion pipeline, and exists for the same reason.
+Incident attribution no longer needs a gate before writing, because it is a deterministic lookup. Contract extraction does, because a model reads free text and can be confidently wrong.
 
 Unconfirmed terms are not returned by `listScopes`, so nothing half-verified can reach a status badge.
 
@@ -630,15 +755,16 @@ No UI snapshot tests.
 
 ## 14. Open questions
 
-
 | #   | Question                                                                                                            | Blocks                   | Owner                   |
 | --- | ------------------------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------- |
 | 1   | Vendor data handling for contract documents sent to an external API                                                 | Slice two implementation | Needs an owner          |
-| 2   | Which Slack channels receive CSM, engineer and Legal alerts                                                         | Alerting                 | Partner Success         |
+| 2   | Which Slack channels receive CSM, engineer and Legal alerts. (Ingestion capture messages go to `C0BUT8U637Y`.)      | Alerting                 | Partner Success         |
 | 3   | Who confirms extracted terms — CSM, Legal, or both                                                                  | Slice two                | Partner Success / Legal |
-| 4   | Deployment target and how n8n reaches the internal endpoint                                                         | Alerting                 | Engineering             |
-| 5   | `source` discriminator column (blocks backfill import). `partner_id`/merchant id is already written by the pipeline | Data layer, backfill     | Engineering / n8n owner |
+| 4   | Cloud SQL connection method from Cloud Run (Direct VPC egress or the Cloud SQL connector), and how `sla-dashboard` sits behind corporate SSO. SSO now also decides who can edit contract terms (§6.6) | Deployment, terms editing | Engineering / Infrastructure |
 
+**Decided 2026-09-28.** Penalty credit never under-reports: a month short of a band's threshold by any amount is in the lower band. Evaluation starts at the later of `effectiveFrom` and 2026-01-01, prorating a mid-month first window. The terms carry no exclusions, because excluded events never become Jira tickets.
+
+**Closed 2026-09-28.** The `source` column is part of the new schema, so it no longer depends on another team.
 
 **Closed 2026-09-21.** `outage_minutes` is wall-clock elapsed time, always positive, and together with `incident_started` is the sole basis for the timeline. Interval merging is valid as specified.
 

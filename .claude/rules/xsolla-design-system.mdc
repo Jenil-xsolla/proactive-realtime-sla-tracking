@@ -1,0 +1,65 @@
+---
+description: Xsolla Operations visual language and tokens for local UI
+globs: "**/components/**/*.tsx,**/*.css"
+alwaysApply: false
+---
+
+# Xsolla Operations Design System
+
+Visual language for this app, derived from Xsolla Operations / xsolla.com. Not XUI (`@xsolla/xui-*`).
+
+Implement theme and primitives **locally** from the tokens below. Do not invent colors, fonts, spacing, or radii. Do not add a workspace design-system package.
+
+## Tokens
+
+Use these exact values (prefer CSS variables, then utilities).
+
+**Type:** sans `DM Sans, Arial, sans-serif`. mono `IBM Plex Mono, monospace`.
+**Radius:** `0.25rem`. **Spacing base:** `0.25rem`.
+
+**Light**
+
+- background `#FFFFFF` / foreground `#000000`
+- border, input `#DDDFD8` / card, sidebar `#F5F6F4`
+- primary, ring `#31CAE8` / primaryForeground `#000000`
+- secondary `#ECEDE9` / muted `#F0F2EF` / mutedForeground `#666B67`
+- accent `#80EAFF` / destructive `#FF005B`
+
+**Dark**
+
+- background `#101617` / foreground `#FFFFFF`
+- border, input `#344448` / card `#182123` / sidebar `#131B1D`
+- primary `#31CAE8` on `#071012` / secondary `#263437`
+- muted `#223033` / mutedForeground `#AAB8BA`
+- accent `#80EAFF` / ring `#80EAFF` / destructive `#FF3977`
+
+**Charts:** `#31CAE8`, `#80EAFF`, `#45646A` / `#7FA4AB`, `#B8E817` / `#C7F22A`, `#FF005B` / `#FF3977`
+
+```css
+:root {
+  --background: #ffffff;
+  --foreground: #000000;
+  --primary: #31cae8;
+  --radius: 0.25rem;
+}
+```
+
+## Visual language
+
+- Lead with black, white, or cool neutrals. Use cyan only for decisive actions, links, active states, and focus.
+- Crisp rectangles, large confident type, open section-level spacing.
+- Avoid soft shadows and excessively rounded cards.
+
+```tsx
+// ❌ BAD — invented color, soft radius, decorative shadow
+<button className="rounded-xl bg-sky-500 shadow-lg">Save</button>
+
+// ✅ GOOD — local primitive, exact tokens
+<button className="min-h-9 rounded-[0.25rem] bg-[#31CAE8] px-4 text-black">
+  Save
+</button>
+```
+
+## Ownership
+
+Keep product data, navigation, and SLA-specific compositions in the app. Shared primitives (button, input, card, table) live in `components/` and must use these tokens.
