@@ -16,9 +16,9 @@ const migrationsFolder = resolve(process.cwd(), "src/data/migrations");
  * the same way, via the pglite migrator instead of this one).
  *
  * Must be run with the connection string for the schema-owner role — never
- * `app_user` or `ingestion_writer`, which only receive grants in
- * 0004_service_grants.sql and don't own the schema — and only after infra
- * has created both of those roles, since that migration grants to them.
+ * `app_user` or `ingestion_writer`, which only receive grants and don't own
+ * the schema — and only after infra has created both of those roles, since
+ * the grant migrations target them.
  */
 export function getMigrationDatabaseUrl(
   env: Record<string, string | undefined> = process.env,

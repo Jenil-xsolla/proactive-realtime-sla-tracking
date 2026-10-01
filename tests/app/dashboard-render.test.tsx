@@ -115,8 +115,8 @@ describe("dashboard model", () => {
       status: "at_risk",
       projectedExhaustion: null,
       penalty: {
-        incurred: { creditFraction: 0.1, amount: null },
-        projected: { creditFraction: 0.1, amount: null },
+        incurred: { kind: "credit", creditFraction: 0.1, amount: null },
+        projected: { kind: "credit", creditFraction: 0.1, amount: null },
       },
       reason: {
         rule: "trend",
@@ -215,6 +215,7 @@ describe("dashboard render", () => {
           },
         }),
         rows: [trackingRow()],
+        invalidTerms: [],
         ingestion: emptyIngestion(),
       },
     });
@@ -247,6 +248,7 @@ describe("dashboard render", () => {
         role: "technical",
         health: health(),
         rows: [trackingRow()],
+        invalidTerms: [],
         ingestion: {
           status: "ok",
           counts: { failed: 2, unresolved: 1, withoutMessage: 1 },
@@ -298,6 +300,7 @@ describe("dashboard render", () => {
         role: "technical",
         health: health(),
         rows: [trackingRow()],
+        invalidTerms: [],
         ingestion: { status: "error" },
       },
     });

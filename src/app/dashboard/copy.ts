@@ -25,6 +25,10 @@ export const BACKTEST_TRACKING_ONLY =
 
 export const BACKTEST_NOT_ON_SCREEN = "Historical replay is not available on this screen yet.";
 
+export const ADD_CONTRACT_TERMS = "Add contract terms";
+
+export const VIEW_TERMS = "View terms";
+
 export const NO_DOWNTIME = "No downtime recorded in this window.";
 
 export const QUERY_FAILED =
@@ -51,6 +55,8 @@ export const INGESTION_UNRESOLVED_LABEL = "PIRs with unresolved values";
 export const INGESTION_WITHOUT_MESSAGE_LABEL = "Captured without a Slack message";
 
 export const INGESTION_HEALTH_UNAVAILABLE = "Ingestion health could not be loaded.";
+
+export const INVALID_CONTRACT_TERMS_LABEL = "Invalid contract terms";
 
 const INGESTION_DETAIL_MAX = 120;
 
@@ -213,21 +219,23 @@ export function ticketHref(url: string | null): string | null {
 export function healthChip(input: {
   unusableCount: number;
   partnersWithNoRows: number;
+  invalidTerms?: number;
 }): { label: string; tone: "neutral" | "warning" } {
   const dropped =
     input.unusableCount === 0
       ? "No rows dropped"
       : `${input.unusableCount} ${input.unusableCount === 1 ? "row" : "rows"} dropped`;
-  if (input.partnersWithNoRows === 0) {
-    return {
-      label: dropped,
-      tone: input.unusableCount > 0 ? "warning" : "neutral",
-    };
-  }
-  const coverage = `${input.partnersWithNoRows} ${input.partnersWithNoRows === 1 ? "partner" : "partners"} with no rows`;
+  const coverage =
+    input.partnersWithNoRows === 0
+      ? null
+      : `${input.partnersWithNoRows} ${input.partnersWithNoRows === 1 ? "partner" : "partners"} with no rows`;
+  const invalidCount = input.invalidTerms ?? 0;
+  const invalid =
+    invalidCount === 0 ? null : `${invalidCount} ${invalidCount === 1 ? "invalid contract" : "invalid contracts"}`;
+  const label = [dropped, coverage, invalid].filter((part) => part !== null).join(" · ");
   return {
-    label: `${dropped} · ${coverage}`,
-    tone: input.unusableCount > 0 ? "warning" : "neutral",
+    label,
+    tone: input.unusableCount > 0 || invalidCount > 0 ? "warning" : "neutral",
   };
 }
 

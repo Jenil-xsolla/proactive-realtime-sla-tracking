@@ -1,5 +1,13 @@
 import type { PartnerId } from "@/registry";
-import type { HandAuthoredTermsFile, SlaScope } from "./types";
+import type { SlaScope } from "./types";
+
+/** Engine-shaped file after `loadContractFile`. Fixtures use this directly. */
+export type SelectableTermsFile = {
+  partner: PartnerId;
+  example?: boolean;
+  lifecycle: string;
+  scopes: readonly SlaScope[];
+};
 
 /**
  * Scopes whose file is `contract_bound` and whose effective window contains `asOf`.
@@ -7,7 +15,7 @@ import type { HandAuthoredTermsFile, SlaScope } from "./types";
  * `terms_pending_review` contributes nothing.
  */
 export function scopesForPartner(
-  files: readonly HandAuthoredTermsFile[],
+  files: readonly SelectableTermsFile[],
   partner: PartnerId,
   asOf: Date,
 ): SlaScope[] {

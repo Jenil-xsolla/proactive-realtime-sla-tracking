@@ -13,9 +13,11 @@ export type PenaltyTier = {
 };
 
 /**
- * Fields the engine reads. Exclusions and minimum duration are not timeline
- * inputs: section 7.3 counts only incident start and outage minutes.
+ * Fields the engine reads. Section 7.3 counts only incident start and outage
+ * minutes. Excluded events never become outage rows.
  */
+export type PenaltyKind = "none" | "not_entered" | "tiers";
+
 export type EngineTerms = {
   /** Uptime target as a fraction. 0.999 is 99.9%. */
   target: number;
@@ -25,6 +27,12 @@ export type EngineTerms = {
   effectiveFrom: Date;
   /** Last instant these terms apply, inclusive. Null when the contract states no end. */
   effectiveTo: Date | null;
+  /**
+   * `none` — the contract has no penalty for this scope.
+   * `not_entered` — a penalty exists and its figures are not in the file yet.
+   * `tiers` — `penaltyTiers` is the below-threshold table.
+   */
+  penaltyKind: PenaltyKind;
   penaltyTiers: readonly PenaltyTier[];
   /** Maximum credit fraction for this scope. Null when the contract states no per-scope cap. */
   perScopeCap: number | null;
@@ -38,7 +46,8 @@ export type SlaScope<S extends string = string> =
   | {
       kind: "service";
       scopeId: string;
-      service: S;
+      /** Registry service ids this scope covers, already expanded by the terms loader. */
+      services: readonly S[];
       terms: EngineTerms;
     }
   | {
@@ -136,12 +145,19 @@ export type StatusReason = {
   burnRate: number;
 };
 
-export type PenaltyFigure = {
-  /** Credit fraction after per-scope and contract-aggregate caps. */
-  creditFraction: number;
-  /** Null when the scope has no monthlyFee. */
-  amount: Money | null;
-};
+export const NO_PENALTY_CLAUSE = "no penalty clause" as const;
+export const PENALTY_NOT_ENTERED = "penalty clause, not yet entered" as const;
+
+export type PenaltyFigure =
+  | { kind: "none"; statement: typeof NO_PENALTY_CLAUSE }
+  | { kind: "unknown"; statement: typeof PENALTY_NOT_ENTERED }
+  | {
+      kind: "credit";
+      /** Credit fraction after per-scope and contract-aggregate caps. */
+      creditFraction: number;
+      /** Null when the scope has no monthlyFee. */
+      amount: Money | null;
+    };
 
 export type Evaluation<P extends string = string, S extends string = string> =
   | {

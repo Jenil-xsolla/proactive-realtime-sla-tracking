@@ -1,5 +1,12 @@
-import { getDatabase, loadIngestionHealth, loadOutages, type IngestionHealth, type OutagePartition } from "@/data";
-import { EmptyTermsProvider, type SlaTermsProvider } from "@/terms";
+import {
+  getDatabase,
+  loadIngestionHealth,
+  loadOutages,
+  readContractTerms,
+  type IngestionHealth,
+  type OutagePartition,
+} from "@/data";
+import { DbTermsProvider, type InvalidContractTerms, type SlaTermsProvider } from "@/terms";
 import type { FeedSources } from "./types";
 
 export async function readPartition(sources?: FeedSources): Promise<OutagePartition> {
@@ -9,9 +16,24 @@ export async function readPartition(sources?: FeedSources): Promise<OutagePartit
   return loadOutages(getDatabase());
 }
 
-/** Empty until a reviewed contract file replaces this one line. */
+/** Production reads sla_contract_terms. Tests pass sources.terms. */
 export function readTerms(sources?: FeedSources): SlaTermsProvider {
-  return sources?.terms ?? new EmptyTermsProvider();
+  if (sources?.terms !== undefined) {
+    return sources.terms;
+  }
+  return new DbTermsProvider(() => readContractTerms(getDatabase()));
+}
+
+/**
+ * Rows `loadContractFile` rejected. Stand-in providers used in tests have
+ * none. Call after listScopes, or this loads the table itself.
+ */
+export async function readInvalidTerms(terms: SlaTermsProvider): Promise<InvalidContractTerms[]> {
+  if (!(terms instanceof DbTermsProvider)) {
+    return [];
+  }
+  await terms.load();
+  return terms.invalidTerms;
 }
 
 export type IngestionHealthResult = { status: "ok"; health: IngestionHealth } | { status: "error" };

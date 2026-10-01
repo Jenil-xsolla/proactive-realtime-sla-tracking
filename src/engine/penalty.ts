@@ -1,13 +1,55 @@
-import type { Money, PenaltyFigure, PenaltyTier, SlaScope } from "./types";
+import {
+  NO_PENALTY_CLAUSE,
+  PENALTY_NOT_ENTERED,
+  type Money,
+  type PenaltyFigure,
+  type PenaltyTier,
+  type SlaScope,
+} from "./types";
 
+/** 100% = 10_000. One basis point is 0.01%. */
+const BASIS_POINTS = 10_000;
+const MINUTE_MS = 60_000;
+
+export type RawPenalty = number | "none" | "unknown";
+
+function basisPoints(fraction: number): number {
+  return Math.round(fraction * BASIS_POINTS);
+}
+
+/** Basis points of downtime at which a below-threshold tier starts. Above 100% always applies. */
+function missedBasisPoints(belowAvailability: number): number {
+  if (!Number.isFinite(belowAvailability)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  return BASIS_POINTS - basisPoints(belowAvailability);
+}
+
+/**
+ * Minutes of downtime allowed by an uptime target over a window.
+ * `target` is a fraction. 0.9995 over 16 days is 11.52 minutes.
+ */
+export function allowanceMinutes(target: number, windowMinutes: number): number {
+  const missed = BASIS_POINTS - basisPoints(target);
+  return (windowMinutes * missed) / BASIS_POINTS;
+}
+
+/**
+ * Credit fraction for downtime against below-threshold tiers.
+ * Compares integer milliseconds of downtime with integer basis points, so a
+ * month that lands exactly on a threshold stays in the higher band.
+ */
 export function rawCredit(minutes: number, windowMinutes: number, tiers: readonly PenaltyTier[]): number {
-  if (!(windowMinutes > 0)) {
+  if (!(windowMinutes > 0) || !(minutes >= 0)) {
     return 0;
   }
-  const availability = 1 - minutes / windowMinutes;
+  const downtimeMs = Math.round(minutes * MINUTE_MS);
+  const windowMs = Math.round(windowMinutes * MINUTE_MS);
   let worst = 0;
   for (const tier of tiers) {
-    if (availability < tier.belowAvailability && tier.creditFraction > worst) {
+    const missedBp = missedBasisPoints(tier.belowAvailability);
+    const belowTier = downtimeMs * BASIS_POINTS > windowMs * missedBp;
+    if (belowTier && tier.creditFraction > worst) {
       worst = tier.creditFraction;
     }
   }
@@ -38,6 +80,24 @@ export function scaleToAggregate(fractions: readonly number[], cap: number | nul
   return fractions.map((fraction) => fraction * factor);
 }
 
+/** Scales credit fractions. `none` and `unknown` stay as they are and do not enter the sum. */
+export function scaleRawPenalties(values: readonly RawPenalty[], cap: number | null): RawPenalty[] {
+  const indexes: number[] = [];
+  const numeric: number[] = [];
+  values.forEach((value, index) => {
+    if (typeof value === "number") {
+      indexes.push(index);
+      numeric.push(value);
+    }
+  });
+  const scaled = scaleToAggregate(numeric, cap);
+  const result = [...values];
+  indexes.forEach((index, position) => {
+    result[index] = scaled[position] ?? 0;
+  });
+  return result;
+}
+
 export function sharedAggregateCap(scopes: readonly SlaScope[]): number | null {
   let cap: number | null = null;
   for (const scope of scopes) {
@@ -60,7 +120,18 @@ export function sharedAggregateCap(scopes: readonly SlaScope[]): number | null {
 
 export function penaltyFigure(creditFraction: number, fee: Money | null): PenaltyFigure {
   return {
+    kind: "credit",
     creditFraction,
     amount: fee === null ? null : { amount: creditFraction * fee.amount, currency: fee.currency },
   };
+}
+
+export function penaltyFor(credit: RawPenalty, fee: Money | null): PenaltyFigure {
+  if (credit === "none") {
+    return { kind: "none", statement: NO_PENALTY_CLAUSE };
+  }
+  if (credit === "unknown") {
+    return { kind: "unknown", statement: PENALTY_NOT_ENTERED };
+  }
+  return penaltyFigure(credit, fee);
 }

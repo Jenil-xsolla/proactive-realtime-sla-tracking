@@ -1,6 +1,6 @@
-import type { BaselineComparison, Evaluation, PartnerScopes, StatusReason } from "@/engine";
+import type { BaselineComparison, Evaluation, PartnerScopes, PenaltyFigure, StatusReason } from "@/engine";
 import { PARTNERS, SERVICES } from "@/registry";
-import type { BusinessRow } from "./types";
+import type { BusinessCredit, BusinessRow } from "./types";
 
 export function toBusinessView(
   evaluations: readonly Evaluation[],
@@ -30,8 +30,8 @@ export function toBusinessView(
       },
       projectedExhaustion: instant(evaluation.projectedExhaustion),
       creditPercentage: {
-        incurred: percent(evaluation.penalty.incurred.creditFraction),
-        projected: percent(evaluation.penalty.projected.creditFraction),
+        incurred: creditReport(evaluation.penalty.incurred),
+        projected: creditReport(evaluation.penalty.projected),
       },
       summary: renderStatusReason(evaluation.reason),
     };
@@ -71,8 +71,11 @@ function comparisonSentence(comparison: BaselineComparison): string {
   return `Equal to this partner's ${span} median.`;
 }
 
-function percent(creditFraction: number): number {
-  return creditFraction * 100;
+function creditReport(figure: PenaltyFigure): BusinessCredit {
+  if (figure.kind === "credit") {
+    return { kind: "percent", percent: figure.creditFraction * 100 };
+  }
+  return figure;
 }
 
 function instant(value: Date | null): string | null {
@@ -95,7 +98,7 @@ function scopeLabel(scopes: readonly PartnerScopes[], partner: string, scopeId: 
     return scopeId;
   }
   if (scope.kind === "service") {
-    return serviceName(scope.service);
+    return scope.services.map((id) => serviceName(id)).join(", ");
   }
   if (scope.includesScopedServices) {
     return "All services";

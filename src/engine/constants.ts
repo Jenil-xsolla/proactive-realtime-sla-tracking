@@ -15,3 +15,10 @@ export const WINDOW_TIMEZONE = "UTC";
  * derived from the clock. Months before this are unknown, not clean.
  */
 export const DATA_COVERAGE_START = "2026-01-01";
+
+/**
+ * A scope is evaluated from the later of its effectiveFrom and this instant.
+ * Decided 2026-09-28. Same calendar day as DATA_COVERAGE_START, for a
+ * different reason: contracts signed earlier are not scored before 2026.
+ */
+export const EVALUATION_START_MS = Date.UTC(2026, 0, 1);

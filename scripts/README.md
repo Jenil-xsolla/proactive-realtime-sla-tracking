@@ -1,1 +1,1 @@
-Operational scripts. The backtest may import the engine directly and must not import alerts or any Slack client.
+Operational scripts. The backtest may import the engine directly and must not import alerts or any Slack client. `db:seed-terms` reads `.local/contract-terms.json` and must not print or commit those terms.

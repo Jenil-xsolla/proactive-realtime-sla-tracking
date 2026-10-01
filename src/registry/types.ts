@@ -12,6 +12,11 @@ export type PartnerEntry = CanonicalEntry & {
 export type ServiceEntry = CanonicalEntry & {
   /** Bare lowercase Jira ARI UUIDs (customfield_10399) that identify this service. */
   aris: readonly string[];
+  /**
+   * Other registry ids whose outages count when a scope names this service.
+   * The terms loader expands them. The engine never reads this field.
+   */
+  includes?: readonly string[];
 };
 
 export type ResolveResult<Id extends string> =

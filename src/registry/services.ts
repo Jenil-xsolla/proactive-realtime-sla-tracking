@@ -2,7 +2,7 @@ import type { ServiceEntry } from "./types";
 
 /**
  * Flat catalog of services that appear on outage records.
- * Parent/child relationships are not recorded here.
+ * `includes` lists other registry ids a scope naming this service also covers.
  * Aliases are spacing variants of the same name, not other products.
  *
  * `aris` are the bare lowercase Jira ARI UUIDs (customfield_10399) for the
@@ -138,6 +138,7 @@ export const SERVICES = [
     displayName: "Webshop",
     aliases: ["Web Shop"],
     aris: ["c0e5c220-2cde-11f1-be25-122ebd4873cf"],
+    includes: ["igs-bb", "subscriptions", "shop-builder"],
   },
   {
     id: "xsolla-analytics",

@@ -1,5 +1,5 @@
 import { Card } from "@/ui";
-import { INGESTION_FAILED_LABEL, INGESTION_HEALTH_UNAVAILABLE, INGESTION_UNRESOLVED_LABEL, INGESTION_WITHOUT_MESSAGE_LABEL, ZERO_COVERAGE_NOTE } from "./copy";
+import { INGESTION_FAILED_LABEL, INGESTION_HEALTH_UNAVAILABLE, INGESTION_UNRESOLVED_LABEL, INGESTION_WITHOUT_MESSAGE_LABEL, INVALID_CONTRACT_TERMS_LABEL, ZERO_COVERAGE_NOTE } from "./copy";
 import type { HealthView, IngestionRow } from "./model";
 
 export function HealthPanel({ health }: { health: HealthView }) {
@@ -33,6 +33,11 @@ export function HealthPanel({ health }: { health: HealthView }) {
               value={String(health.partnersWithNoRows.length)}
               detail={ZERO_COVERAGE_NOTE}
               warn={false}
+            />
+            <Metric
+              label={INVALID_CONTRACT_TERMS_LABEL}
+              value={String(health.invalidTerms.length)}
+              warn={health.invalidTerms.length > 0}
             />
             {ingestion.status === "ok" ? (
               <>
@@ -68,6 +73,7 @@ export function HealthPanel({ health }: { health: HealthView }) {
               ))}
             </ul>
           ) : null}
+          <InvalidTermsList rows={health.invalidTerms} />
           <NameList label="Unresolved partner names" names={health.unresolvedPartnerNames} />
           <NameList label="Unmatched service names" names={health.unmatchedServiceNames} />
           <NameList label="Partners with no attributed rows" names={health.partnersWithNoRows} />
@@ -100,6 +106,32 @@ function Metric({
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={`font-mono text-2xl tabular-nums ${warn ? "text-warning" : "text-foreground"}`}>{value}</p>
       {detail ? <p className="text-sm text-muted-foreground">{detail}</p> : null}
+    </div>
+  );
+}
+
+function InvalidTermsList({
+  rows,
+}: {
+  rows: readonly { partner: string; label: string; message: string }[];
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {INVALID_CONTRACT_TERMS_LABEL}
+      </h3>
+      {rows.length === 0 ? (
+        <p className="text-sm text-foreground">None</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {rows.map((row) => (
+            <li key={row.partner} className="text-sm text-warning">
+              {row.label}
+              <span className="text-muted-foreground"> — {row.message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

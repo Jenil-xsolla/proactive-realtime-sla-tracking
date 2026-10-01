@@ -8,7 +8,7 @@ export function plainMessage(row: ScoredRow, period: string): string {
   const scope = mrkdwn(scopePhrase(row));
   return [
     `*${partner}* ${scope} is *${statusWord(row.status)}* for ${period}.`,
-    `Projected credit at stake: *${creditPercent(row.penalty.projected.creditFraction)}*.`,
+    `Projected credit at stake: *${creditText(row.penalty.projected)}*.`,
     plainReason(row.reason),
   ].join("\n");
 }
@@ -88,8 +88,11 @@ function statusWord(status: ScoredRow["status"]): string {
   return status;
 }
 
-function creditPercent(fraction: number): string {
-  return `${formatNumber(fraction * 100)}%`;
+function creditText(figure: ScoredRow["penalty"]["projected"]): string {
+  if (figure.kind === "none" || figure.kind === "unknown") {
+    return figure.statement;
+  }
+  return `${formatNumber(figure.creditFraction * 100)}%`;
 }
 
 function formatMinutes(value: number): string {

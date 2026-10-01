@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createDatabase, loadOutages } from "@/data";
+import { createDatabase, loadOutages, readContractTerms } from "@/data";
 import {
   DATA_COVERAGE_START,
   evaluate,
@@ -13,9 +13,8 @@ import {
   type UsableOutage,
   type Window,
 } from "@/engine";
-import { readTerms } from "@/feed/read";
 import { PARTNERS, type PartnerId, type ServiceId } from "@/registry";
-import type { SlaScope } from "@/terms";
+import { DbTermsProvider, type SlaScope } from "@/terms";
 
 /**
  * Historical replay of evaluate(). asOf steps one UTC day at a time from the
@@ -285,6 +284,8 @@ function replaySteps(through: Date): ReplayStep[] {
       asOf: new Date(Math.min(nextMs, monthEndMs, endMs)),
       month: `${year}-${String(monthIndex + 1).padStart(2, "0")}`,
       window: {
+        // Calendar month. evaluate() starts each scope at the later of this
+        // start, effectiveFrom, and 2026-01-01, and prorates that shorter window.
         start: new Date(Date.UTC(year, monthIndex, 1)),
         end: new Date(monthEndMs),
       },
@@ -439,7 +440,11 @@ async function main(): Promise<void> {
   const database = createDatabase(connectionString);
   try {
     const partition = await loadOutages(database);
-    const scopes = await scopesSeenInReplay(readTerms(), through, args.partner);
+    const scopes = await scopesSeenInReplay(
+      new DbTermsProvider(() => readContractTerms(database)),
+      through,
+      args.partner,
+    );
     const report = backtest({
       outages: partition.usable,
       scopes,

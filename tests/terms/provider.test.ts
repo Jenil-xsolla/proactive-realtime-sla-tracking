@@ -2,8 +2,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PARTNERS, type PartnerId } from "@/registry";
-import { EmptyTermsProvider, StaticTermsProvider } from "@/terms";
-import type { HandAuthoredTermsFile, SlaScope, SlaTerms } from "@/terms";
+import { EmptyTermsProvider, StaticTermsProvider, loadContractFile } from "@/terms";
+import type { ContractScope, HandAuthoredTermsFile, SlaScope } from "@/terms";
 import { EXAMPLE_NOT_A_CONTRACT } from "@/terms/contracts/example.not-a-contract";
 
 const AS_OF = new Date("2026-06-15T00:00:00.000Z");
@@ -23,30 +23,32 @@ function sourceFiles(dir: string): string[] {
   return found;
 }
 
-function terms(overrides: Partial<SlaTerms> = {}): SlaTerms {
+function scope(overrides: Partial<ContractScope> = {}): ContractScope {
   return {
-    target: 0.999,
-    window: "calendar_month",
-    timezone: "UTC",
-    effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
-    effectiveTo: null,
-    exclusions: ["planned_maintenance"],
-    penaltyTiers: [{ belowAvailability: 0.999, creditFraction: 0.1 }],
-    perScopeCap: 0.5,
-    contractAggregateCap: 1,
-    minimumCountableOutageMinutes: null,
+    kind: "service",
+    scopeId: "payments",
+    services: ["payments"],
+    target: 99.9,
+    penalty: { kind: "none" },
     sourceClause: "FIXTURE — not a contract clause",
-    monthlyFee: null,
     ...overrides,
   };
 }
 
 function boundFile(
   partner: PartnerId,
-  scopes: SlaScope[],
+  scopes: ContractScope[],
   lifecycle: HandAuthoredTermsFile["lifecycle"] = "contract_bound",
+  dates: { effectiveFrom?: string; effectiveTo?: string | null } = {},
 ): HandAuthoredTermsFile {
-  return { partner, lifecycle, scopes };
+  return {
+    partner,
+    lifecycle,
+    effectiveFrom: dates.effectiveFrom ?? "2026-01-01",
+    effectiveTo: dates.effectiveTo ?? null,
+    contractAggregateCap: null,
+    scopes,
+  };
 }
 
 describe("EmptyTermsProvider", () => {
@@ -90,83 +92,78 @@ describe("StaticTermsProvider", () => {
   });
 
   it("returns contract_bound scopes whose effective window contains asOf", async () => {
-    const scope: SlaScope = {
-      kind: "service",
-      scopeId: "roblox-payments",
-      service: "payments",
-      terms: terms(),
-    };
-    const provider = new StaticTermsProvider([boundFile("roblox", [scope])]);
+    const file = boundFile("roblox", [scope({ scopeId: "roblox-payments" })]);
+    const provider = new StaticTermsProvider([file]);
 
-    expect(await provider.listScopes("roblox", AS_OF)).toEqual([scope]);
+    expect(await provider.listScopes("roblox", AS_OF)).toEqual(loadContractFile(file).scopes);
     expect(await provider.listScopes("twitch", AS_OF)).toEqual([]);
   });
 
   it("hides terms_pending_review from listScopes", async () => {
-    const scope: SlaScope = {
-      kind: "service",
-      scopeId: "twitch-login",
-      service: "login",
-      terms: terms(),
-    };
-    const provider = new StaticTermsProvider([
-      boundFile("twitch", [scope], "terms_pending_review"),
-    ]);
+    const file = boundFile("twitch", [scope({ scopeId: "twitch-login", services: ["login"] })], "terms_pending_review");
+    const provider = new StaticTermsProvider([file]);
 
     expect(await provider.listScopes("twitch", AS_OF)).toEqual([]);
   });
 
   it("omits a contract_bound scope outside its effective window", async () => {
-    const closed: SlaScope = {
-      kind: "service",
-      scopeId: "nexters-closed",
-      service: "login",
-      terms: terms({
-        effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
-        effectiveTo: new Date("2026-03-01T00:00:00.000Z"),
-      }),
-    };
-    const notYet: SlaScope = {
-      kind: "service",
-      scopeId: "nexters-future",
-      service: "payments",
-      terms: terms({ effectiveFrom: new Date("2026-12-01T00:00:00.000Z") }),
-    };
-    const provider = new StaticTermsProvider([boundFile("nexters", [closed, notYet])]);
+    const closed = boundFile(
+      "nexters",
+      [scope({ scopeId: "nexters-closed", services: ["login"] })],
+      "contract_bound",
+      { effectiveFrom: "2026-01-01", effectiveTo: "2026-03-01" },
+    );
+    const notYet = boundFile(
+      "nexters",
+      [scope({ scopeId: "nexters-future" })],
+      "contract_bound",
+      { effectiveFrom: "2026-12-01" },
+    );
+    const provider = new StaticTermsProvider([closed, notYet]);
 
     expect(await provider.listScopes("nexters", AS_OF)).toEqual([]);
-    expect(await provider.listScopes("nexters", new Date("2026-03-01T00:00:00.000Z"))).toEqual([
-      closed,
-    ]);
-    expect(await provider.listScopes("nexters", new Date("2026-12-01T00:00:00.000Z"))).toEqual([
-      notYet,
-    ]);
+    expect(await provider.listScopes("nexters", new Date("2026-03-01T00:00:00.000Z"))).toEqual(
+      loadContractFile(closed).scopes,
+    );
+    expect(await provider.listScopes("nexters", new Date("2026-12-01T00:00:00.000Z"))).toEqual(
+      loadContractFile(notYet).scopes,
+    );
   });
 
   it("refuses a catch-all scope that does not state includesScopedServices", async () => {
-    const scope = {
-      kind: "catch_all",
-      scopeId: "netmarble-rest",
-      terms: terms(),
-    } as SlaScope;
-    const provider = new StaticTermsProvider([boundFile("netmarble", [scope])]);
+    const file = boundFile("netmarble", [
+      {
+        kind: "catch_all",
+        scopeId: "netmarble-rest",
+        target: 99.9,
+        penalty: { kind: "none" },
+        sourceClause: "FIXTURE — not a contract clause",
+      },
+    ]);
+    const provider = new StaticTermsProvider([file]);
 
     await expect(provider.listScopes("netmarble", AS_OF)).rejects.toThrow(/includesScopedServices/);
   });
 
   it("rejects an example file marked contract_bound", async () => {
-    const scope: SlaScope = {
-      kind: "catch_all",
-      scopeId: "example-rest",
-      includesScopedServices: true,
-      terms: terms(),
-    };
     const provider = new StaticTermsProvider([
       {
         example: true,
         partner: "scopely",
         lifecycle: "contract_bound",
-        scopes: [scope],
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+        contractAggregateCap: null,
+        scopes: [
+          {
+            kind: "catch_all",
+            scopeId: "example-rest",
+            includesScopedServices: true,
+            target: 99.9,
+            penalty: { kind: "none" },
+            sourceClause: "EXAMPLE — not a contract clause",
+          },
+        ],
       } as unknown as HandAuthoredTermsFile,
     ]);
 

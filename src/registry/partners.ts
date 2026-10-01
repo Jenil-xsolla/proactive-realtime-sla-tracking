@@ -70,3 +70,7 @@ export const PARTNERS = [
 ] as const satisfies readonly PartnerEntry[];
 
 export type PartnerId = (typeof PARTNERS)[number]["id"];
+
+export function isPartnerId(value: string): value is PartnerId {
+  return PARTNERS.some((partner) => partner.id === value);
+}
