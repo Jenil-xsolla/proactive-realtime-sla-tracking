@@ -1,8 +1,15 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { UNUSABLE_REASONS } from "@/data";
-import type { SlaFeed, TechnicalRow } from "@/feed";
-import { QUERY_FAILED, ROW_UNAVAILABLE } from "@/app/dashboard/copy";
+import type { IngestionHealthDetail, SlaFeed, TechnicalRow } from "@/feed";
+import {
+  INGESTION_FAILED_LABEL,
+  INGESTION_HEALTH_UNAVAILABLE,
+  INGESTION_UNRESOLVED_LABEL,
+  INGESTION_WITHOUT_MESSAGE_LABEL,
+  QUERY_FAILED,
+  ROW_UNAVAILABLE,
+} from "@/app/dashboard/copy";
 import {
   buildPartnerGroups,
   buildReadyDashboard,
@@ -23,6 +30,16 @@ function health(overrides: Partial<SlaFeed["health"]> = {}): SlaFeed["health"] {
     unresolvedServiceNames: [],
     partnersWithZeroAttributedRows: ["twitch"],
     ...overrides,
+  };
+}
+
+function emptyIngestion(): IngestionHealthDetail {
+  return {
+    status: "ok",
+    counts: { failed: 0, unresolved: 0, withoutMessage: 0 },
+    failed: [],
+    unresolved: [],
+    withoutMessage: [],
   };
 }
 
@@ -198,6 +215,7 @@ describe("dashboard render", () => {
           },
         }),
         rows: [trackingRow()],
+        ingestion: emptyIngestion(),
       },
     });
     const html = renderToStaticMarkup(<TechnicalDashboard model={model} />);
@@ -215,6 +233,80 @@ describe("dashboard render", () => {
     expect(html).toContain("Tracking-only partners have no terms to replay.");
     expect(html).toContain('href="https://jira.example/browse/GTO-543"');
     expect(html).not.toContain("atlassian.net");
+    expect(html).toContain(INGESTION_FAILED_LABEL);
+    expect(html).toContain(INGESTION_UNRESOLVED_LABEL);
+    expect(html).toContain(INGESTION_WITHOUT_MESSAGE_LABEL);
+  });
+
+  it("renders each ingestion list with a linked key, and 'None' when a list is empty", () => {
+    const model = buildReadyDashboard({
+      asOf,
+      windowKey: "2026-08",
+      feed: {
+        asOf: asOf.toISOString(),
+        role: "technical",
+        health: health(),
+        rows: [trackingRow()],
+        ingestion: {
+          status: "ok",
+          counts: { failed: 2, unresolved: 1, withoutMessage: 1 },
+          failed: [
+            {
+              pirKey: "GTO-900",
+              pirUrl: "https://jira.example/browse/GTO-900",
+              error: "Jira fetch failed",
+              updatedAt: "2026-09-20T00:00:00.000Z",
+            },
+            {
+              pirKey: "GTO-901",
+              pirUrl: null,
+              error: "Missing incident link",
+              updatedAt: "2026-09-19T00:00:00.000Z",
+            },
+          ],
+          unresolved: [
+            {
+              pirKey: "GTO-902",
+              pirUrl: "https://jira.example/browse/GTO-902",
+              values: [{ kind: "merchant", raw: "Some Unmatched Studio LLC" }],
+            },
+          ],
+          withoutMessage: [],
+        },
+      },
+    });
+    const html = renderToStaticMarkup(<TechnicalDashboard model={model} />);
+
+    expect(html).toContain("Failed PIRs");
+    expect(html).toContain('href="https://jira.example/browse/GTO-900"');
+    expect(html).toContain(">GTO-900<");
+    expect(html).toContain("Jira fetch failed");
+    expect(html).toContain(">GTO-901<");
+    expect(html).toContain("Missing incident link");
+    expect(html).not.toMatch(/<a[^>]*>GTO-901<\/a>/);
+    expect(html).toContain(">GTO-902<");
+    expect(html).toContain("Some Unmatched Studio LLC");
+    expect(html).toContain("None");
+  });
+
+  it("shows an explicit error state for ingestion health, never a zero", () => {
+    const model = buildReadyDashboard({
+      asOf,
+      windowKey: "2026-08",
+      feed: {
+        asOf: asOf.toISOString(),
+        role: "technical",
+        health: health(),
+        rows: [trackingRow()],
+        ingestion: { status: "error" },
+      },
+    });
+    const html = renderToStaticMarkup(<TechnicalDashboard model={model} />);
+
+    expect(html).toContain(INGESTION_HEALTH_UNAVAILABLE);
+    expect(html).not.toContain(INGESTION_FAILED_LABEL);
+    expect(html).not.toContain(INGESTION_UNRESOLVED_LABEL);
+    expect(html).not.toContain(INGESTION_WITHOUT_MESSAGE_LABEL);
   });
 
   it("does not render a zero when the query failed", () => {

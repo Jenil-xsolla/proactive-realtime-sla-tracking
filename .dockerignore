@@ -1,0 +1,7 @@
+node_modules
+.next
+.env*
+.superpowers
+.claude
+tests
+specs

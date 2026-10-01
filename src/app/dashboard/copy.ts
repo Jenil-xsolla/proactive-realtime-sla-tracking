@@ -46,6 +46,34 @@ export const HEALTH_UNAVAILABLE =
 export const ZERO_COVERAGE_NOTE =
   "No resolved outage in the extract. Distinct from zero minutes in the selected window.";
 
+export const INGESTION_FAILED_LABEL = "Failed PIRs";
+export const INGESTION_UNRESOLVED_LABEL = "PIRs with unresolved values";
+export const INGESTION_WITHOUT_MESSAGE_LABEL = "Captured without a Slack message";
+
+export const INGESTION_HEALTH_UNAVAILABLE = "Ingestion health could not be loaded.";
+
+const INGESTION_DETAIL_MAX = 120;
+
+/**
+ * Truncates by Unicode code point, not UTF-16 code unit, so a surrogate
+ * pair (an emoji, for example) is never split in half.
+ */
+export function truncate(text: string, max: number): string {
+  const codePoints = Array.from(text);
+  if (codePoints.length <= max) {
+    return text;
+  }
+  return `${codePoints.slice(0, Math.max(0, max - 1)).join("").trimEnd()}…`;
+}
+
+export function ingestionDetailText(text: string): string {
+  return truncate(text, INGESTION_DETAIL_MAX);
+}
+
+export function unresolvedValuesSummary(values: readonly { kind: string; raw: string }[]): string {
+  return ingestionDetailText(values.map((value) => value.raw).join("; "));
+}
+
 const REASON_LABELS = [
   ["missing_outage_minutes", "Missing outage minutes"],
   ["invalid_outage_minutes", "Invalid outage minutes"],

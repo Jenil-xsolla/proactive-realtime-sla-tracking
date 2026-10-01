@@ -6,6 +6,7 @@ import {
   severityLabel,
   windowFromMonthKey,
   windowPhase,
+  type IngestionHealthDetail,
   type SlaFeed,
   type TechnicalRow,
 } from "@/feed";
@@ -20,11 +21,13 @@ import {
   formatMinutes,
   formatUtcTimestamp,
   healthChip,
+  ingestionDetailText,
   monthTitle,
   reasonEntries,
   reconciliationText,
   reviewLine,
   ticketHref,
+  unresolvedValuesSummary,
   windowMinutesLabel,
 } from "./copy";
 
@@ -36,6 +39,19 @@ export type MonthOption = {
   selected: boolean;
 };
 
+export type IngestionRow = { pirKey: string; href: string | null; detail: string };
+
+export type IngestionSection = { count: number; rows: IngestionRow[] };
+
+export type IngestionView =
+  | { status: "error" }
+  | {
+      status: "ok";
+      failed: IngestionSection;
+      unresolved: IngestionSection;
+      withoutMessage: IngestionSection;
+    };
+
 export type HealthView = {
   usableCount: number;
   droppedRows: number;
@@ -43,6 +59,7 @@ export type HealthView = {
   unmatchedServiceNames: string[];
   partnersWithNoRows: string[];
   reasons: { key: string; label: string; count: number }[];
+  ingestion: IngestionView;
 };
 
 export type OutageView = {
@@ -121,14 +138,52 @@ export function buildMonthOptions(asOf: Date, selectedKey: string): MonthOption[
     .reverse();
 }
 
-export function buildHealth(health: SlaFeed["health"]): HealthView {
+export function buildHealth(input: { health: SlaFeed["health"]; ingestion: IngestionHealthDetail }): HealthView {
   return {
-    usableCount: health.usableCount,
-    droppedRows: health.unusableCount,
-    unresolvedPartnerNames: health.unresolvedPartnerNames,
-    unmatchedServiceNames: health.unresolvedServiceNames,
-    partnersWithNoRows: health.partnersWithZeroAttributedRows.map((id) => partnerLabel(id)),
-    reasons: reasonEntries(health.countsByReason),
+    usableCount: input.health.usableCount,
+    droppedRows: input.health.unusableCount,
+    unresolvedPartnerNames: input.health.unresolvedPartnerNames,
+    unmatchedServiceNames: input.health.unresolvedServiceNames,
+    partnersWithNoRows: input.health.partnersWithZeroAttributedRows.map((id) => partnerLabel(id)),
+    reasons: reasonEntries(input.health.countsByReason),
+    ingestion: buildIngestionView(input.ingestion),
+  };
+}
+
+/**
+ * `status: "error"` renders as an explicit error state in the panel, never
+ * as zero counts (main spec §9.3: zero and error must never look alike).
+ */
+function buildIngestionView(ingestion: IngestionHealthDetail): IngestionView {
+  if (ingestion.status === "error") {
+    return { status: "error" };
+  }
+  return {
+    status: "ok",
+    failed: {
+      count: ingestion.counts.failed,
+      rows: ingestion.failed.map((row) => ({
+        pirKey: row.pirKey,
+        href: ticketHref(row.pirUrl),
+        detail: row.error === null ? "" : ingestionDetailText(row.error),
+      })),
+    },
+    unresolved: {
+      count: ingestion.counts.unresolved,
+      rows: ingestion.unresolved.map((row) => ({
+        pirKey: row.pirKey,
+        href: ticketHref(row.pirUrl),
+        detail: unresolvedValuesSummary(row.values),
+      })),
+    },
+    withoutMessage: {
+      count: ingestion.counts.withoutMessage,
+      rows: ingestion.withoutMessage.map((row) => ({
+        pirKey: row.pirKey,
+        href: ticketHref(row.pirUrl),
+        detail: ingestionDetailText(row.slackError),
+      })),
+    },
   };
 }
 
@@ -137,7 +192,7 @@ export function buildReadyDashboard(input: {
   windowKey: string;
   feed: Extract<SlaFeed, { role: "technical" | "system" }>;
 }): Extract<DashboardModel, { state: "ready" }> {
-  const health = buildHealth(input.feed.health);
+  const health = buildHealth({ health: input.feed.health, ingestion: input.feed.ingestion });
   return {
     state: "ready",
     asOfLabel: formatUtcTimestamp(input.feed.asOf),

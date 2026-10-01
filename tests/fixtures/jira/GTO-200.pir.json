@@ -1,0 +1,35 @@
+{
+  "key": "GTO-200",
+  "fields": {
+    "summary": "PIR — GTO-199: Temporary Unavailability of Payment Creation — July 24, 2026",
+    "created": "2026-07-25T02:00:23.196+0500",
+    "customfield_31331": 25,
+    "customfield_11646": { "value": "L1 — Critical", "id": "36917" },
+    "customfield_10399": [
+      { "id": "ari:cloud:graph::service/6184b75d-f203-4004-be12-5899d49497d2/271a0cee-45d2-11f0-81c7-122fa60ab53d" }
+    ],
+    "customfield_13920": {
+      "type": "doc", "version": 1,
+      "content": [
+        { "type": "paragraph", "content": [ { "type": "text", "text": "Top 10 merchants:" } ] },
+        { "type": "bulletList", "content": [
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "ROBLOX Corporation" } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Niantic" } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Valve" } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Nexters Global Ltd" } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Scopely | TopHat" } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Bandai Namco Entertainment Inc." } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "NETMARBLE CORPORATION" } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Twitch TV" } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "VoyagerOne Pte. Ltd." } ] } ] },
+          { "type": "listItem", "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "MY.GAMES MENA FZ LLC" } ] } ] }
+        ] }
+      ]
+    },
+    "issuelinks": [
+      { "id": "1053892", "type": { "id": "10006", "name": "Problem/Incident" }, "inwardIssue": { "key": "GTO-199" } },
+      { "id": "1058649", "type": { "id": "11031", "name": "Post-Incident Reviews" }, "outwardIssue": { "key": "GTO-199" } },
+      { "id": "1061491", "type": { "id": "10003", "name": "Relates" }, "inwardIssue": { "key": "INCIDENTS-484" } }
+    ]
+  }
+}
