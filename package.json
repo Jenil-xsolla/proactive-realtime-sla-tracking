@@ -12,7 +12,8 @@
     "verify-registry": "tsx scripts/verify-registry.ts",
     "backtest": "tsx scripts/backtest.ts",
     "db:migrate": "tsx scripts/migrate.ts",
-    "db:seed-terms": "tsx scripts/seed-contract-terms.ts"
+    "db:seed-terms": "tsx scripts/seed-contract-terms.ts",
+    "db:import-backfill": "tsx scripts/import-backfill.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",
