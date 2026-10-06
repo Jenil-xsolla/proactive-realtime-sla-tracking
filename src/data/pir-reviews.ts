@@ -128,7 +128,7 @@ async function loadWithoutMessage(db: Database): Promise<IngestionHealthList<Pir
 }
 
 /**
- * Read-only SELECT on sla_pir_reviews, which the dashboard's app_user can
+ * Read-only SELECT on sla_pir_reviews, which the dashboard's sla_tracking_app_user can
  * do (main spec §5.1). Backs the health panel: failed PIRs, captured PIRs
  * with unresolved values, and captured PIRs without a Slack message
  * (design §2, §4). Filters, ordering and the cap all run in SQL, since this

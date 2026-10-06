@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../support/database";
 
 /**
- * Verifies the per-service database boundary from main spec §5.1: `app_user`
- * (sla-dashboard) and `ingestion_writer` (sla-ingestion) each get exactly the
+ * Verifies the per-service database boundary from main spec §5.1: `sla_tracking_app_user`
+ * (sla-dashboard) and `sla_tracking_ingestion_writer` (sla-ingestion) each get exactly the
  * privileges the spec table lists, nothing more.
  *
  * PGlite honours `SET ROLE` and enforces GRANT-based privileges under it
@@ -54,13 +54,13 @@ describe("service grants (spec §5.1)", () => {
     await testDb?.close();
   });
 
-  it("app_user can SELECT all three ingestion tables but cannot INSERT into sla_outages", async () => {
+  it("sla_tracking_app_user can SELECT all three ingestion tables but cannot INSERT into sla_outages", async () => {
     testDb = await createTestDatabase();
     await seedPirReview(testDb, "GTO-1");
     await seedOutage(testDb, "GTO-1");
     await seedCorrection(testDb, "GTO-1");
 
-    await asRole(testDb, "app_user", async () => {
+    await asRole(testDb, "sla_tracking_app_user", async () => {
       await expect(testDb.client.query("SELECT * FROM sla_outages")).resolves.toBeDefined();
       await expect(testDb.client.query("SELECT * FROM sla_pir_reviews")).resolves.toBeDefined();
       await expect(testDb.client.query("SELECT * FROM sla_outage_corrections")).resolves.toBeDefined();
@@ -76,10 +76,10 @@ describe("service grants (spec §5.1)", () => {
     });
   });
 
-  it("app_user can write sla_alert_state", async () => {
+  it("sla_tracking_app_user can write sla_alert_state", async () => {
     testDb = await createTestDatabase();
 
-    await asRole(testDb, "app_user", async () => {
+    await asRole(testDb, "sla_tracking_app_user", async () => {
       await expect(
         testDb.client.query(
           `insert into sla_alert_state (partner_slug, scope_id, period, last_status, updated_at)
@@ -97,21 +97,21 @@ describe("service grants (spec §5.1)", () => {
     });
   });
 
-  it("ingestion_writer can DELETE from sla_outages", async () => {
+  it("sla_tracking_ingestion_writer can DELETE from sla_outages", async () => {
     testDb = await createTestDatabase();
     await seedOutage(testDb, "GTO-3");
 
-    await asRole(testDb, "ingestion_writer", async () => {
+    await asRole(testDb, "sla_tracking_ingestion_writer", async () => {
       await expect(
         testDb.client.query("DELETE FROM sla_outages WHERE pir_key = $1", ["GTO-3"]),
       ).resolves.toBeDefined();
     });
   });
 
-  it("ingestion_writer cannot touch sla_alert_state", async () => {
+  it("sla_tracking_ingestion_writer cannot touch sla_alert_state", async () => {
     testDb = await createTestDatabase();
 
-    await asRole(testDb, "ingestion_writer", async () => {
+    await asRole(testDb, "sla_tracking_ingestion_writer", async () => {
       await expect(testDb.client.query("SELECT * FROM sla_alert_state")).rejects.toThrow(/permission denied/);
 
       await expect(
@@ -124,12 +124,12 @@ describe("service grants (spec §5.1)", () => {
     });
   });
 
-  it("ingestion_writer cannot UPDATE or DELETE sla_outage_corrections", async () => {
+  it("sla_tracking_ingestion_writer cannot UPDATE or DELETE sla_outage_corrections", async () => {
     testDb = await createTestDatabase();
     await seedPirReview(testDb, "GTO-4");
     await seedCorrection(testDb, "GTO-4");
 
-    await asRole(testDb, "ingestion_writer", async () => {
+    await asRole(testDb, "sla_tracking_ingestion_writer", async () => {
       await expect(
         testDb.client.query(`update sla_outage_corrections set reason = $1 where pir_key = $2`, ["oops", "GTO-4"]),
       ).rejects.toThrow(/permission denied/);
@@ -140,10 +140,10 @@ describe("service grants (spec §5.1)", () => {
     });
   });
 
-  it("app_user can read and write sla_contract_terms but cannot delete it", async () => {
+  it("sla_tracking_app_user can read and write sla_contract_terms but cannot delete it", async () => {
     testDb = await createTestDatabase();
 
-    await asRole(testDb, "app_user", async () => {
+    await asRole(testDb, "sla_tracking_app_user", async () => {
       await expect(
         testDb.client.query(
           `insert into sla_contract_terms (partner_slug, lifecycle, terms, updated_by, updated_at, created_at)
@@ -167,10 +167,10 @@ describe("service grants (spec §5.1)", () => {
     });
   });
 
-  it("ingestion_writer cannot read or write sla_contract_terms", async () => {
+  it("sla_tracking_ingestion_writer cannot read or write sla_contract_terms", async () => {
     testDb = await createTestDatabase();
 
-    await asRole(testDb, "ingestion_writer", async () => {
+    await asRole(testDb, "sla_tracking_ingestion_writer", async () => {
       await expect(testDb.client.query("SELECT * FROM sla_contract_terms")).rejects.toThrow(/permission denied/);
 
       await expect(
@@ -183,11 +183,11 @@ describe("service grants (spec §5.1)", () => {
     });
   });
 
-  it("ingestion_writer can INSERT into sla_outages and sla_outage_corrections using the serial sequences", async () => {
+  it("sla_tracking_ingestion_writer can INSERT into sla_outages and sla_outage_corrections using the serial sequences", async () => {
     testDb = await createTestDatabase();
     await seedPirReview(testDb, "GTO-5");
 
-    await asRole(testDb, "ingestion_writer", async () => {
+    await asRole(testDb, "sla_tracking_ingestion_writer", async () => {
       await expect(
         testDb.client.query(
           `insert into sla_outages

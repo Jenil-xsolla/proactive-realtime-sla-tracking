@@ -63,7 +63,7 @@ never from the built image.
   - `SERVICE_ROLE=dashboard` — plain env var, not a secret
   - `VIEWER_ROLE` — `business`, `technical`, or `system` (`src/feed/viewer.ts`); plain env var,
     not a secret — it's a stand-in for real session/SSO handling (main spec AD-5)
-  - `DATABASE_URL` — connects as `app_user` (SELECT on `sla_outages`, `sla_pir_reviews`,
+  - `DATABASE_URL` — connects as `sla_tracking_app_user` (SELECT on `sla_outages`, `sla_pir_reviews`,
     `sla_outage_corrections`; SELECT/INSERT/UPDATE on `sla_alert_state` — main spec §5.1)
   - `INTERNAL_SHARED_SECRET` — checked on `/api/internal/alerts/run` against the
     `x-internal-secret` header
@@ -111,7 +111,7 @@ services:
   Slack's request signature on `/api/slack/interactions`).
 - **Environment:**
   - `SERVICE_ROLE=ingestion`
-  - `INGESTION_DATABASE_URL` — connects as `ingestion_writer` (SELECT/INSERT/UPDATE/DELETE on
+  - `INGESTION_DATABASE_URL` — connects as `sla_tracking_ingestion_writer` (SELECT/INSERT/UPDATE/DELETE on
     `sla_outages`; SELECT/INSERT/UPDATE on `sla_pir_reviews`; SELECT/INSERT on
     `sla_outage_corrections` — main spec §5.1)
   - `JIRA_BASE_URL`
@@ -198,8 +198,8 @@ secret names above are proposals; use whatever names onboarding creates.
 ## Database
 
 1. **Responsibilities:** Infra/DBA provisions the Cloud SQL instance and database, an **owner**
-   login that owns the database (used only for running migrations), and the `app_user` and
-   `ingestion_writer` logins with no table privileges — the migrations grant those.
+   login that owns the database (used only for running migrations), and the `sla_tracking_app_user` and
+   `sla_tracking_ingestion_writer` logins with no table privileges — the migrations grant those.
    `src/data/migrations/0004_service_grants.sql` grants to both roles and **fails if they don't
    exist yet**, so Infra must create all three logins before migrations run — this ordering is
    not optional. Infra puts all three connection strings in Secret Manager, and grants the app
@@ -215,7 +215,7 @@ secret names above are proposals; use whatever names onboarding creates.
    ```
 
    Then, against `src/data/migrations`, with the connection as the schema owner role (not
-   `app_user` or `ingestion_writer` — they only receive grants, they don't own the schema).
+   `sla_tracking_app_user` or `sla_tracking_ingestion_writer` — they only receive grants, they don't own the schema).
    `drizzle-kit migrate` has no `--url` flag and `drizzle.config.ts` has no `dbCredentials`
    hardcoded, so use `scripts/migrate.ts` (`pnpm db:migrate`) instead: it opens a `pg` `Pool` from
    `MIGRATION_DATABASE_URL` and runs Drizzle's `node-postgres` migrator against
@@ -227,8 +227,8 @@ secret names above are proposals; use whatever names onboarding creates.
 
    - `MIGRATION_DATABASE_URL` — the schema-owner connection string, pointed at the proxy's
      `localhost:5432`, used only for this one-off migration step. It is not part of either Cloud
-     Run service's runtime environment and is separate from `DATABASE_URL` (`app_user`) and
-     `INGESTION_DATABASE_URL` (`ingestion_writer`) above. Keep it in Secret Manager or an
+     Run service's runtime environment and is separate from `DATABASE_URL` (`sla_tracking_app_user`) and
+     `INGESTION_DATABASE_URL` (`sla_tracking_ingestion_writer`) above. Keep it in Secret Manager or an
      operator's local secret store, not as a service env var.
    - The owner login must own the database, or have `CREATE` on it, because Drizzle creates a
      `drizzle` schema for its `__drizzle_migrations` tracking table.
@@ -238,15 +238,15 @@ secret names above are proposals; use whatever names onboarding creates.
    `drizzle.__drizzle_migrations` and applies only the new files.
 
 4. **Verify on Cloud SQL (Postgres 15+)** that `GRANT USAGE ON SCHEMA public` took effect for
-   both `app_user` and `ingestion_writer`. Cloud SQL Postgres 15+ revokes the default
+   both `sla_tracking_app_user` and `sla_tracking_ingestion_writer`. Cloud SQL Postgres 15+ revokes the default
    CREATE-and-USAGE-to-PUBLIC grant on the `public` schema, so a role without explicit `USAGE`
    cannot reach the tables inside it even after the table-level grants. The test suite only
    verified the grants migration against PGlite, which does not enforce this — it has not been
    verified against real Cloud SQL. Check with:
 
    ```sql
-   SELECT has_schema_privilege('app_user', 'public', 'USAGE');
-   SELECT has_schema_privilege('ingestion_writer', 'public', 'USAGE');
+   SELECT has_schema_privilege('sla_tracking_app_user', 'public', 'USAGE');
+   SELECT has_schema_privilege('sla_tracking_ingestion_writer', 'public', 'USAGE');
    ```
 
    Both must return `t`.
@@ -355,7 +355,7 @@ the Neuronet deployment path:
 
 1. Neuronet onboarding creates the runtime service account
    `neuronet-j-patel@xsolla-n8n-prod.iam.gserviceaccount.com` and the secrets above.
-2. Infra provisions the owner login, `app_user` and `ingestion_writer` on the Cloud SQL instance
+2. Infra provisions the owner login, `sla_tracking_app_user` and `sla_tracking_ingestion_writer` on the Cloud SQL instance
    in `xsolla-n8n-prod`; the app owner runs `pnpm db:migrate` through the Cloud SQL Auth Proxy
    (see **Database**).
 3. Import the historical spreadsheet with `source = 'backfill'`. This is a manual import — no

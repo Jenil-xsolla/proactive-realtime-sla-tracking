@@ -3,7 +3,7 @@ import { createDatabase, type Database } from "@/data";
 /**
  * Mirrors src/data/db.ts's getDatabase(), but reads INGESTION_DATABASE_URL
  * and caches independently: the dashboard and ingestion apps connect to
- * different roles (app_user vs ingestion_writer, see the grants migration)
+ * different roles (sla_tracking_app_user vs sla_tracking_ingestion_writer, see the grants migration)
  * and must never share a cached pool.
  */
 let database: Database | undefined;

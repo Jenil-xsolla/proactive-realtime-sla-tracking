@@ -10,9 +10,9 @@
 -- enough in tests), but Cloud SQL on Postgres 15+ revokes the default
 -- CREATE-and-USAGE-to-PUBLIC grant on the public schema, and a role needs
 -- USAGE on the schema to reach the tables inside it there.
-GRANT USAGE ON SCHEMA public TO sla_tracking_sla_tracking_app_user;
+GRANT USAGE ON SCHEMA public TO sla_tracking_app_user;
 --> statement-breakpoint
-GRANT USAGE ON SCHEMA public TO sla_tracking_sla_tracking_ingestion_writer;
+GRANT USAGE ON SCHEMA public TO sla_tracking_ingestion_writer;
 --> statement-breakpoint
 
 -- sla_tracking_ingestion_writer (sla-ingestion): SELECT/INSERT/UPDATE/DELETE on

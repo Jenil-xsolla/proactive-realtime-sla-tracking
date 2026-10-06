@@ -21,8 +21,8 @@ export interface TestDatabase {
 export async function createTestDatabase(): Promise<TestDatabase> {
   const client = new PGlite();
 
-  await client.exec("CREATE ROLE app_user NOLOGIN;");
-  await client.exec("CREATE ROLE ingestion_writer NOLOGIN;");
+  await client.exec("CREATE ROLE sla_tracking_app_user NOLOGIN;");
+  await client.exec("CREATE ROLE sla_tracking_ingestion_writer NOLOGIN;");
 
   const db = drizzle(client, { schema });
   await migrate(db, { migrationsFolder });

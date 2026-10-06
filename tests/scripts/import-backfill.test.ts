@@ -100,17 +100,17 @@ describe("import backfill", () => {
     testDb = undefined;
   });
 
-  it("reads INGESTION_DATABASE_URL and treats --dry-run as the only flag", () => {
+  it("reads MIGRATION_DATABASE_URL and treats --dry-run as the only flag", () => {
     expect(BACKFILL_FILE).toBe(".local/backfill-outages.json");
-    expect(() => getImportDatabaseUrl({})).toThrow(/INGESTION_DATABASE_URL is required/);
-    expect(() => getImportDatabaseUrl({ INGESTION_DATABASE_URL: "" })).toThrow(
-      /INGESTION_DATABASE_URL is required/,
+    expect(() => getImportDatabaseUrl({})).toThrow(/MIGRATION_DATABASE_URL is required/);
+    expect(() => getImportDatabaseUrl({ MIGRATION_DATABASE_URL: "" })).toThrow(
+      /MIGRATION_DATABASE_URL is required/,
     );
-    expect(() => getImportDatabaseUrl({ INGESTION_DATABASE_URL: "  " })).toThrow(
-      /INGESTION_DATABASE_URL is required/,
+    expect(() => getImportDatabaseUrl({ MIGRATION_DATABASE_URL: "  " })).toThrow(
+      /MIGRATION_DATABASE_URL is required/,
     );
-    expect(getImportDatabaseUrl({ INGESTION_DATABASE_URL: "postgres://ingestion_writer@host/db" })).toBe(
-      "postgres://ingestion_writer@host/db",
+    expect(getImportDatabaseUrl({ MIGRATION_DATABASE_URL: "postgres://owner@host/db" })).toBe(
+      "postgres://owner@host/db",
     );
     expect(parseImportArgs([])).toEqual({ dryRun: false });
     expect(parseImportArgs(["--dry-run"])).toEqual({ dryRun: true });
@@ -122,7 +122,7 @@ describe("import backfill", () => {
     const lines: string[] = [];
     const file = writeBackfill(VALID_ROWS);
 
-    const result = await asRole(testDb, "ingestion_writer", () =>
+    const result = await asRole(testDb, "sla_tracking_ingestion_writer", () =>
       importBackfillFile(testDb!.db, file, {
         dryRun: false,
         write: (line) => lines.push(line),
@@ -173,12 +173,12 @@ describe("import backfill", () => {
   it("a second run inserts nothing", async () => {
     testDb = await createTestDatabase();
     const file = writeBackfill(VALID_ROWS);
-    await asRole(testDb, "ingestion_writer", () =>
+    await asRole(testDb, "sla_tracking_ingestion_writer", () =>
       importBackfillFile(testDb!.db, file, { dryRun: false, write: () => undefined }),
     );
     const lines: string[] = [];
 
-    const result = await asRole(testDb, "ingestion_writer", () =>
+    const result = await asRole(testDb, "sla_tracking_ingestion_writer", () =>
       importBackfillFile(testDb!.db, file, {
         dryRun: false,
         write: (line) => lines.push(line),
@@ -208,7 +208,7 @@ describe("import backfill", () => {
       }),
     ]);
 
-    const error = await asRole(testDb, "ingestion_writer", () =>
+    const error = await asRole(testDb, "sla_tracking_ingestion_writer", () =>
       importBackfillFile(testDb!.db, file, { dryRun: false, write: () => undefined }),
     ).then(
       () => {
@@ -255,7 +255,7 @@ describe("import backfill", () => {
       illustrativeRow(),
     ]);
 
-    const error = await asRole(testDb, "ingestion_writer", () =>
+    const error = await asRole(testDb, "sla_tracking_ingestion_writer", () =>
       importBackfillFile(testDb!.db, file, { dryRun: false, write: () => undefined }),
     ).then(
       () => {
@@ -315,7 +315,7 @@ describe("import backfill", () => {
     ]);
     const lines: string[] = [];
 
-    const result = await asRole(testDb, "ingestion_writer", () =>
+    const result = await asRole(testDb, "sla_tracking_ingestion_writer", () =>
       importBackfillFile(testDb!.db, file, {
         dryRun: false,
         write: (line) => lines.push(line),
@@ -375,7 +375,7 @@ describe("import backfill", () => {
     const lines: string[] = [];
     const file = writeBackfill(VALID_ROWS);
 
-    const result = await asRole(testDb, "ingestion_writer", () =>
+    const result = await asRole(testDb, "sla_tracking_ingestion_writer", () =>
       importBackfillFile(testDb!.db, file, {
         dryRun: true,
         write: (line) => lines.push(line),

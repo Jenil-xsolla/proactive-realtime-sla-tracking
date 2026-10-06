@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { inArray } from "drizzle-orm";
@@ -8,8 +8,8 @@ import { PARTNERS, SERVICES, resolvePartner, resolveService } from "@/registry";
 /**
  * Historical outage import. The file is gitignored. Never commit its contents.
  *
- * Connects with INGESTION_DATABASE_URL, the same variable sla-ingestion uses,
- * so the session is ingestion_writer. app_user cannot write sla_outages.
+ * Connects with MIGRATION_DATABASE_URL, the schema-owner connection
+ * pnpm db:migrate uses. That login can insert into sla_outages.
  *
  * Every row is validated before any write. One failing row aborts the import
  * and lists every problem. The insert is one transaction with
@@ -56,11 +56,33 @@ type ValidRow = {
 };
 
 export function getImportDatabaseUrl(env: Record<string, string | undefined> = process.env): string {
-  const url = env.INGESTION_DATABASE_URL?.trim();
+  const url = env.MIGRATION_DATABASE_URL?.trim() || (env === process.env ? migrationUrlFromDotEnv() : undefined);
   if (!url) {
-    throw new Error("INGESTION_DATABASE_URL is required");
+    throw new Error("MIGRATION_DATABASE_URL is required");
   }
   return url;
+}
+
+function migrationUrlFromDotEnv(): string | undefined {
+  if (!existsSync(".env")) {
+    return undefined;
+  }
+  for (const line of readFileSync(".env", "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    const separator = trimmed.indexOf("=");
+    if (separator === -1 || trimmed.slice(0, separator).trim() !== "MIGRATION_DATABASE_URL") {
+      continue;
+    }
+    let value = trimmed.slice(separator + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    return value || undefined;
+  }
+  return undefined;
 }
 
 export function parseImportArgs(argv: readonly string[]): { dryRun: boolean } {

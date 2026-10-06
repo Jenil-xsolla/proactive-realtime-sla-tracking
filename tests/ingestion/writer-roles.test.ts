@@ -19,9 +19,9 @@ import { createTestDatabase, type TestDatabase } from "../support/database";
 
 /**
  * Integration check that the writer functions actually work under the
- * `ingestion_writer` role's real GRANTs (not just under the test harness's
+ * `sla_tracking_ingestion_writer` role's real GRANTs (not just under the test harness's
  * unrestricted owner connection every other writer test uses), and that the
- * dashboard's read functions work under `app_user`'s. Complements
+ * dashboard's read functions work under `sla_tracking_app_user`'s. Complements
  * tests/data/grants.test.ts, which probes the GRANTs directly with raw SQL;
  * this exercises the actual functions the app calls, on PGlite with the
  * real migrations.
@@ -73,10 +73,10 @@ describe("writer functions under their real database roles (spec §5.1)", () => 
     await testDb?.close();
   });
 
-  it("recordReceipt, captureRows, applyCorrection and every other ingestion_writer function succeed under SET ROLE ingestion_writer", async () => {
+  it("recordReceipt, captureRows, applyCorrection and every other sla_tracking_ingestion_writer function succeed under SET ROLE sla_tracking_ingestion_writer", async () => {
     testDb = await createTestDatabase();
 
-    await asRole(testDb, "ingestion_writer", async () => {
+    await asRole(testDb, "sla_tracking_ingestion_writer", async () => {
       const receipt = await recordReceipt(testDb.db, "GTO-700", T0);
       expect(receipt.kind).toBe("new");
 
@@ -120,7 +120,7 @@ describe("writer functions under their real database roles (spec §5.1)", () => 
     });
   });
 
-  it("loadIngestionHealth and loadOutages succeed under SET ROLE app_user", async () => {
+  it("loadIngestionHealth and loadOutages succeed under SET ROLE sla_tracking_app_user", async () => {
     testDb = await createTestDatabase();
     // Seed as the unrestricted owner connection before switching role.
     await recordReceipt(testDb.db, "GTO-701", T0);
@@ -130,21 +130,21 @@ describe("writer functions under their real database roles (spec §5.1)", () => 
       T0,
     );
 
-    await asRole(testDb, "app_user", async () => {
+    await asRole(testDb, "sla_tracking_app_user", async () => {
       await expect(loadIngestionHealth(testDb.db)).resolves.toBeDefined();
       const partition = await loadOutages(testDb.db);
       expect(partition.usable.length + partition.unusable.length).toBeGreaterThan(0);
     });
   });
 
-  it("app_user cannot run captureRows: permission denied on sla_outages", async () => {
+  it("sla_tracking_app_user cannot run captureRows: permission denied on sla_outages", async () => {
     testDb = await createTestDatabase();
     // Seed as the unrestricted owner connection so there is a review row to
     // lock; the point of this test is the permission check, not a
     // "no such row" business error.
     await recordReceipt(testDb.db, "GTO-702", T0);
 
-    await asRole(testDb, "app_user", async () => {
+    await asRole(testDb, "sla_tracking_app_user", async () => {
       let thrown: unknown;
       try {
         await captureRows(

@@ -56,11 +56,11 @@ describe("seed contract terms", () => {
     testDb = undefined;
   });
 
-  it("reads DATABASE_URL and treats --force as the only flag", () => {
+  it("reads MIGRATION_DATABASE_URL and treats --force as the only flag", () => {
     expect(CONTRACT_TERMS_FILE).toBe(".local/contract-terms.json");
-    expect(() => getSeedDatabaseUrl({})).toThrow(/DATABASE_URL is required/);
-    expect(getSeedDatabaseUrl({ DATABASE_URL: "postgres://app_user@host/db" })).toBe(
-      "postgres://app_user@host/db",
+    expect(() => getSeedDatabaseUrl({})).toThrow(/MIGRATION_DATABASE_URL is required/);
+    expect(getSeedDatabaseUrl({ MIGRATION_DATABASE_URL: "postgres://owner@host/db" })).toBe(
+      "postgres://owner@host/db",
     );
     expect(parseSeedArgs([])).toEqual({ force: false });
     expect(parseSeedArgs(["--force"])).toEqual({ force: true });

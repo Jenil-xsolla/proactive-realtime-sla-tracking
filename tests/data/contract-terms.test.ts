@@ -74,8 +74,8 @@ describe("sla_contract_terms migrations", () => {
   it("creates sla_contract_terms on a database that already has the first four tables", async () => {
     const client = new PGlite();
     try {
-      await client.exec("CREATE ROLE app_user NOLOGIN;");
-      await client.exec("CREATE ROLE ingestion_writer NOLOGIN;");
+      await client.exec("CREATE ROLE sla_tracking_app_user NOLOGIN;");
+      await client.exec("CREATE ROLE sla_tracking_ingestion_writer NOLOGIN;");
       for (const tag of APPLIED_BEFORE_CONTRACT_TERMS) {
         const sql = readFileSync(path.join(MIGRATIONS_FOLDER, `${tag}.sql`), "utf8");
         for (const statement of sql.split("--> statement-breakpoint")) {

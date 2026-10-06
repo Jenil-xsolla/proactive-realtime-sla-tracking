@@ -23,18 +23,13 @@ export type SeedOutcome = {
   version: number;
 };
 
+/** Schema-owner connection, the same variable pnpm db:migrate and db:import-backfill use. */
 export function getSeedDatabaseUrl(env: Record<string, string | undefined> = process.env): string {
-  const url = env.DATABASE_URL?.trim();
-  if (url) {
-    return url;
+  const url = env.MIGRATION_DATABASE_URL?.trim() || (env === process.env ? migrationUrlFromDotEnv() : undefined);
+  if (!url) {
+    throw new Error("MIGRATION_DATABASE_URL is required");
   }
-  if (env === process.env) {
-    const fromFile = databaseUrlFromDotEnv();
-    if (fromFile) {
-      return fromFile;
-    }
-  }
-  throw new Error("DATABASE_URL is required");
+  return url;
 }
 
 export function parseSeedArgs(argv: readonly string[]): { force: boolean } {
@@ -159,7 +154,7 @@ function partnerId(value: string): PartnerId {
   return found.id;
 }
 
-function databaseUrlFromDotEnv(): string | undefined {
+function migrationUrlFromDotEnv(): string | undefined {
   if (!existsSync(".env")) {
     return undefined;
   }
@@ -169,7 +164,7 @@ function databaseUrlFromDotEnv(): string | undefined {
       continue;
     }
     const separator = trimmed.indexOf("=");
-    if (separator === -1 || trimmed.slice(0, separator).trim() !== "DATABASE_URL") {
+    if (separator === -1 || trimmed.slice(0, separator).trim() !== "MIGRATION_DATABASE_URL") {
       continue;
     }
     let value = trimmed.slice(separator + 1).trim();
