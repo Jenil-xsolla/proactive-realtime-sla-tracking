@@ -26,6 +26,7 @@ import type {
   BaselineComparison,
   EngineTerms,
   Evaluation,
+  MonthHistory,
   OutageRef,
   PartnerScopes,
   SlaScope,
@@ -165,6 +166,7 @@ function scoredRows<P extends string, S extends string>(
       incurred: scopePenalty(counted.usedMinutes, scopeMinutes, scope.terms),
       projected: scopePenalty(projectedMinutes, scopeMinutes, scope.terms),
       windowStart: scopeWindow.start,
+      history: monthHistory(matching, window, DATA_COVERAGE_START),
     };
   });
 
@@ -207,6 +209,10 @@ function scoredRows<P extends string, S extends string>(
               draft.scope.terms.penaltyTiers,
             )
           : null,
+      windowMinutes: draft.windowMinutes,
+      elapsedMinutes: draft.elapsed * draft.windowMinutes,
+      history: draft.history,
+      comparison: baseline(draft.history, draft.usedMinutes),
       penalty: {
         incurred: penaltyFor(incurred[index] ?? 0, draft.scope.terms.monthlyFee),
         projected: penaltyFor(projected[index] ?? 0, draft.scope.terms.monthlyFee),
@@ -281,13 +287,15 @@ function trackingRows<P extends string, S extends string>(
       continue;
     }
     const usedMinutes = countDowntime(attributed).usedMinutes;
+    const history = monthHistory(serviceOutages, window, DATA_COVERAGE_START);
     results.push({
       kind: "tracking_only",
       partner: partnerId,
       service,
       usedMinutes,
       incidentCount: attributed.length,
-      comparison: baseline(service, serviceOutages, window, usedMinutes, DATA_COVERAGE_START),
+      comparison: baseline(history, usedMinutes),
+      history,
       outages: refs(attributed),
     });
   }
@@ -296,31 +304,40 @@ function trackingRows<P extends string, S extends string>(
 
 const BASELINE_LOOKBACK_MONTHS = 6;
 
-function baseline<P extends string, S extends string>(
-  service: S,
+/**
+ * Used minutes for each of the six calendar months before the window's
+ * month, oldest first. A month that starts before coverage is null.
+ */
+function monthHistory<P extends string, S extends string>(
   outages: readonly UsableOutage<P, S>[],
   window: Window,
-  currentMinutes: number,
   coverageStart: string,
-): BaselineComparison {
+): MonthHistory[] {
   const coverageStartMs = utcDateMs(coverageStart);
   const year = window.start.getUTCFullYear();
   const month = window.start.getUTCMonth();
-  const totals: number[] = [];
-  for (let delta = 1; delta <= BASELINE_LOOKBACK_MONTHS; delta += 1) {
-    const monthInterval = {
-      startMs: Date.UTC(year, month - delta, 1),
-      endMs: Date.UTC(year, month - delta + 1, 1),
-    };
-    if (monthInterval.startMs < coverageStartMs) {
+  const history: MonthHistory[] = [];
+  for (let delta = BASELINE_LOOKBACK_MONTHS; delta >= 1; delta -= 1) {
+    const startMs = Date.UTC(year, month - delta, 1);
+    const endMs = Date.UTC(year, month - delta + 1, 1);
+    const label = monthLabel(new Date(startMs));
+    if (startMs < coverageStartMs) {
+      history.push({ month: label, usedMinutes: null });
       continue;
     }
-    const attributed = attribute(
-      outages.filter((row) => row.serviceId === service),
-      monthInterval,
-    );
-    totals.push(countDowntime(attributed).usedMinutes);
+    const attributed = attribute(outages, { startMs, endMs });
+    history.push({ month: label, usedMinutes: countDowntime(attributed).usedMinutes });
   }
+  return history;
+}
+
+function monthLabel(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** The comparison is derived from the history, so the two cannot disagree. */
+function baseline(history: readonly MonthHistory[], currentMinutes: number): BaselineComparison {
+  const totals = history.flatMap((entry) => (entry.usedMinutes === null ? [] : [entry.usedMinutes]));
   const coveredMonths = totals.length;
   const monthsWithDowntime = totals.filter((minutes) => minutes > 0).length;
   if (coveredMonths < MIN_BASELINE_MONTHS) {

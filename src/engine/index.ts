@@ -14,6 +14,7 @@ export type {
   EngineTerms,
   Evaluation,
   Money,
+  MonthHistory,
   OutageRef,
   PartnerScopes,
   PenaltyFigure,
