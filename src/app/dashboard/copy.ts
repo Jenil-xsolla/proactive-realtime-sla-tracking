@@ -31,7 +31,7 @@ export const BACKTEST_NO_EXPOSURE = "No exposure";
 export const BACKTEST_COUNT_NOTE =
   "Trend and level each count on a step where that clause fired. Breaching and meeting each count alone.";
 
-export const CLAUSE_NOT_RECORDED = "Clause reference not yet recorded.";
+export const CLAUSE_NOT_RECORDED = "Clause not recorded";
 
 export const FILED_AGAINST = "Filed against";
 
@@ -371,4 +371,116 @@ export function reasonEntries(
 
 export function reasonLabel(reason: string): string {
   return REASON_LABELS.find(([key]) => key === reason)?.[1] ?? reason;
+}
+
+export const NO_SERVICE = "No service";
+export const NO_TERMS = "No terms";
+export const TO_DATE = "to date";
+export const TRACKING_ONLY_LABEL = "Tracking only";
+export const TRACKING_ONLY_NOTE =
+  "Tracking only. Minutes are recorded downtime; there is no target or status.";
+export const NO_TARGET_NOTE = "No target, no status";
+export const NO_ATTENTION = "No term is at risk or breaching in this window.";
+export const NO_TICKETS = "No outages in this window.";
+export const DRAFT_TERMS = "Draft terms, not scoring";
+export const CONTRACT_ON_FILE = "Contract on file";
+export const MONTHLY_WINDOW = "Monthly window";
+export const OUTSIDE_SCOPES = "Outside contracted scopes";
+export const UPTIME_CAPTION = "UPTIME · MONTHLY";
+export const ALERTS_NOTE =
+  "Transitions only. The job writes a row when a status rises and sends; recoveries are recorded without a message.";
+export const ALERTS_UNAVAILABLE = "Alert history unavailable.";
+export const HEALTH_UNAVAILABLE_CHIP = "Health unavailable";
+export const NEVER_ALERTED = "Never";
+export const TREND_NA = "n/a";
+
+/** Uptime with three decimals, as contracts write it. 0.9995 is 99.950%. */
+export function formatUptime(fraction: number): string {
+  return `${(Math.round(fraction * 100_000) / 1000).toFixed(3)}%`;
+}
+
+/**
+ * Display derivation only. Over the elapsed window while open, over the full
+ * window once settled. With nothing elapsed there is no downtime to divide by,
+ * so uptime is 1.
+ */
+export function actualUptime(input: {
+  usedMinutes: number;
+  windowMinutes: number;
+  elapsedMinutes: number;
+  phase: "open" | "settled";
+}): number {
+  const denominator = input.phase === "settled" ? input.windowMinutes : input.elapsedMinutes;
+  if (!(denominator > 0)) {
+    return 1;
+  }
+  return Math.max(0, 1 - input.usedMinutes / denominator);
+}
+
+export function consumedText(usedMinutes: number, allowedMinutes: number): string {
+  if (!(allowedMinutes > 0)) {
+    return "Allowance is zero";
+  }
+  const percent = Math.round((usedMinutes / allowedMinutes) * 1000) / 10;
+  return `${percent.toFixed(1)}% consumed`;
+}
+
+export function downLine(usedMinutes: number, allowedMinutes: number): string {
+  return `${usedMinutes.toFixed(1)} / ${allowedMinutes.toFixed(1)} min down`;
+}
+
+export function creditText(incurred: string, projected: string): string {
+  return `${incurred} → ${projected}`;
+}
+
+export function trendText(
+  versusMedian: "above" | "equal" | "below" | null,
+): { mark: "up" | "down" | "flat" | "none"; text: string } {
+  if (versusMedian === "above") return { mark: "up", text: "above median" };
+  if (versusMedian === "below") return { mark: "down", text: "below median" };
+  if (versusMedian === "equal") return { mark: "flat", text: "at median" };
+  return { mark: "none", text: TREND_NA };
+}
+
+export function summaryLine(terms: number, partners: number, trackingOnly: number): string {
+  const head = `Monitoring ${terms} SLA ${terms === 1 ? "term" : "terms"} across ${partners} ${partners === 1 ? "partner" : "partners"}`;
+  if (trackingOnly === 0) {
+    return `${head}.`;
+  }
+  return `${head} · ${trackingOnly} ${trackingOnly === 1 ? "partner" : "partners"} tracking only.`;
+}
+
+export function railLine(input: {
+  terms: number;
+  outages: number;
+  minutes: number;
+  trackingOnly: boolean;
+  services?: number;
+}): string {
+  const outages = `${input.outages} ${input.outages === 1 ? "outage" : "outages"}`;
+  if (input.trackingOnly) {
+    const services = input.services ?? 0;
+    return `${services} ${services === 1 ? "service" : "services"} · ${outages} · ${input.minutes.toFixed(1)} min recorded`;
+  }
+  return `${input.terms} ${input.terms === 1 ? "term" : "terms"} · ${outages} · ${input.minutes.toFixed(1)} min`;
+}
+
+export function alertScopeLabel(scopeId: string, title: (scopeId: string) => string): string {
+  const prefix = "tracking:";
+  if (scopeId.startsWith(prefix)) {
+    return `Service: ${title(scopeId.slice(prefix.length))}`;
+  }
+  return title(scopeId);
+}
+
+export function alertStatusLabel(status: string): string {
+  if (status === "heads_up") return "Heads-up";
+  if (status === "quiet") return "Quiet";
+  if (status === "meeting" || status === "at_risk" || status === "breaching")
+    return statusLabel(status);
+  return status;
+}
+
+export function noAlertsFor(monthTitle: string): string {
+  return `No alerts recorded for ${monthTitle}.`;
 }

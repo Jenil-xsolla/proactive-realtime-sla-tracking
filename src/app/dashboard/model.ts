@@ -20,6 +20,7 @@ import {
   CLAUSE_NOT_RECORDED,
   EXHAUSTION_NONE,
   NO_DOWNTIME,
+  NO_SERVICE,
   ROW_UNAVAILABLE,
   UNAVAILABLE,
   comparisonText,
@@ -423,7 +424,7 @@ function toPartnerView(
       rows: [
         {
           key: `${id}:none`,
-          service: "—",
+          service: NO_SERVICE,
           minutes: formatMinutes(0),
           incidents: "0",
           comparison: NO_DOWNTIME,

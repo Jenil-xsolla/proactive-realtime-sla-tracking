@@ -127,7 +127,7 @@ function InvalidTermsList({
           {rows.map((row) => (
             <li key={row.partner} className="text-sm text-warning">
               {row.label}
-              <span className="text-muted-foreground"> — {row.message}</span>
+              <span className="text-muted-foreground"> · {row.message}</span>
             </li>
           ))}
         </ul>
@@ -177,7 +177,7 @@ function IngestionList({ label, rows }: { label: string; rows: readonly Ingestio
                   {row.pirKey}
                 </a>
               )}
-              {row.detail ? <span className="text-muted-foreground"> — {row.detail}</span> : null}
+              {row.detail ? <span className="text-muted-foreground"> · {row.detail}</span> : null}
             </li>
           ))}
         </ul>
