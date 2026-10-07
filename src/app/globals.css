@@ -14,6 +14,7 @@
   --font-mono: var(--font-ibm-plex-mono), monospace;
   --radius: 0.25rem;
   --spacing-base: 0.25rem;
+  --sidebar-width: 17rem;
 
   --background: #ffffff;
   --foreground: #000000;
