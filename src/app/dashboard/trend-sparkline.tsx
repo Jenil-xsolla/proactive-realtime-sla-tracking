@@ -7,7 +7,7 @@ const marks = { up: "↑", down: "↓", flat: "→", none: "" } as const;
 export function TrendSparkline({ trend, status }: { trend: TrendView; status: Status | null }) {
   const markTone = trend.mark === "up" ? "text-danger" : "text-muted-foreground";
   return (
-    <span className="inline-flex items-center gap-3">
+    <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
       <Sparkline
         label={trend.summary}
         currentTone={status === null ? "neutral" : tones[status]}
@@ -17,7 +17,7 @@ export function TrendSparkline({ trend, status }: { trend: TrendView; status: St
           current: bar.current,
         }))}
       />
-      <span className={`whitespace-nowrap font-mono text-xs ${markTone}`}>
+      <span className={`font-mono text-xs leading-tight ${markTone}`}>
         {marks[trend.mark]} {trend.text}
       </span>
     </span>

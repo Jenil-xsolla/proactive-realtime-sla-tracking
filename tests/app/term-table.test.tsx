@@ -1,0 +1,80 @@
+/** @vitest-environment happy-dom */
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { TermTable } from "@/app/dashboard/term-table";
+import { OUTAGE_DISCLOSURE_SCRIPT } from "@/app/dashboard/outage-disclosure";
+import { buildTechnicalPartners } from "@/app/dashboard/view";
+import type { TechnicalRow } from "@/feed";
+import { scoredRow } from "../support/rows";
+
+type Outage = Extract<TechnicalRow, { kind: "scored" }>["outages"][number];
+
+const boundaryOutage: Outage = {
+  pirKey: "GTO-543",
+  pirUrl: "https://jira.example/browse/GTO-543",
+  partnerId: 151639,
+  severity: "l1",
+  decisionType: "ai_approved",
+  reviewedBy: "jenil_patel",
+  reviewedAt: "2026-09-22T21:34:00.000Z",
+  source: null,
+  service: "payments",
+  incidentStarted: "2026-08-31T23:40:00.000Z",
+  minutesInWindow: 30,
+  totalMinutes: 50,
+  mergeGroup: "1",
+  countedMinutes: 30,
+};
+
+function termsFor(outages: Outage[], usedMinutes: number) {
+  const partner = buildTechnicalPartners([scoredRow({ outages, usedMinutes })], "open", "2026-09", null).find((entry) => entry.id === "scopely");
+  if (partner === undefined) throw new Error("missing partner");
+  return partner.terms;
+}
+
+function press(summary: HTMLElement, key: string) {
+  summary.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+}
+
+describe("term table expander", () => {
+  it("toggles from the row, Enter, and Space, and reconciles a boundary outage", () => {
+    document.body.innerHTML = renderToStaticMarkup(<TermTable partnerName="Scopely" terms={termsFor([boundaryOutage], 30)} />);
+    new Function(OUTAGE_DISCLOSURE_SCRIPT)();
+
+    const summary = document.querySelector("summary");
+    const details = document.querySelector("details");
+    expect(summary).not.toBeNull();
+    expect(summary?.tagName).toBe("SUMMARY");
+    expect(summary?.getAttribute("aria-expanded")).toBe("false");
+    expect(summary?.getAttribute("aria-controls")).toBeTruthy();
+    expect(details?.open).toBe(false);
+
+    summary?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(details?.open).toBe(true);
+    expect(summary?.getAttribute("aria-expanded")).toBe("true");
+    const panel = document.getElementById(summary?.getAttribute("aria-controls") ?? "");
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain("GTO-543");
+    expect(panel?.textContent).toContain("50 min total · 30 min in this window");
+    expect(panel?.textContent).toContain("1 outage · 30 minutes counted in this window");
+
+    press(summary as HTMLElement, "Enter");
+    expect(details?.open).toBe(false);
+    expect(summary?.getAttribute("aria-expanded")).toBe("false");
+
+    press(summary as HTMLElement, " ");
+    expect(details?.open).toBe(true);
+    expect(summary?.getAttribute("aria-expanded")).toBe("true");
+    expect(panel?.textContent).toContain("50 min total · 30 min in this window");
+  });
+
+  it("notes overlapping minutes and reconciles the merged total once", () => {
+    const merged: Outage[] = [
+      { ...boundaryOutage, pirKey: "GTO-700", incidentStarted: "2026-09-05T10:00:00.000Z", minutesInWindow: 40, totalMinutes: 40, mergeGroup: "1", countedMinutes: 30 },
+      { ...boundaryOutage, pirKey: "GTO-701", incidentStarted: "2026-09-05T10:20:00.000Z", minutesInWindow: 20, totalMinutes: 20, mergeGroup: "1", countedMinutes: 10 },
+    ];
+    const html = renderToStaticMarkup(<TermTable partnerName="Scopely" terms={termsFor(merged, 40)} />);
+    expect(html).toContain("Overlapping minutes were counted once.");
+    expect(html).toContain("2 outages · 40 minutes counted in this window");
+  });
+});

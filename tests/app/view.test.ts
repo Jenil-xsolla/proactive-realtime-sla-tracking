@@ -145,7 +145,7 @@ describe("view model", () => {
     expect(none?.terms[0]?.credit).toEqual({
       incurred: "no penalty clause",
       projected: "no penalty clause",
-      text: "no penalty clause → no penalty clause",
+      text: "no penalty clause",
     });
     const [unknown] = buildBusinessPartners(
       [{ ...row, creditPercentage: { incurred: { kind: "unknown", statement: "penalty clause, not yet entered" }, projected: { kind: "unknown", statement: "penalty clause, not yet entered" } } }],

@@ -140,6 +140,11 @@ function uptimeFields(input: {
   };
 }
 
+/** A statement the feed repeats for both figures reads once; numeric pairs keep the arrow. */
+function creditSummary(incurred: string, projected: string, numeric: boolean): string {
+  return !numeric && incurred === projected ? incurred : creditText(incurred, projected);
+}
+
 function technicalTerm(
   row: Extract<TechnicalRow, { kind: "scored" }>,
   phase: "open" | "settled",
@@ -174,7 +179,7 @@ function technicalTerm(
       row.comparison.kind === "compared" ? row.comparison.versusMedian : null,
     ),
     exhaustion: row.projectedExhaustion === null ? EXHAUSTION_NONE : formatUtcTimestamp(row.projectedExhaustion),
-    credit: { incurred, projected, text: creditText(incurred, projected) },
+    credit: { incurred, projected, text: creditSummary(incurred, projected, row.penalty.incurred.kind === "credit") },
     sentence: statusExplanation(row.reason),
     nextTier: row.nextTierStartsAfterMinutes === null ? null : tierDistanceText(row.usedMinutes, row.nextTierStartsAfterMinutes),
     windowNote: proratedWindowNote(row.windowStart),
@@ -234,7 +239,7 @@ function businessTerm(
     downLine: downLine(used, allowed),
     trend: buildTrend(row.history, windowKey, used, row.versusMedian),
     exhaustion: row.projectedExhaustion === null ? EXHAUSTION_NONE : formatUtcTimestamp(row.projectedExhaustion),
-    credit: { incurred, projected, text: creditText(incurred, projected) },
+    credit: { incurred, projected, text: creditSummary(incurred, projected, row.creditPercentage.incurred.kind === "percent") },
     sentence: row.summary,
     nextTier: null,
     windowNote: null,
