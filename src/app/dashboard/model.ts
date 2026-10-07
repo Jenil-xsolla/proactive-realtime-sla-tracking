@@ -9,6 +9,7 @@ import {
   type IngestionHealthDetail,
   type SlaFeed,
   type TechnicalRow,
+  type UnusableRow,
 } from "@/feed";
 import {
   affectedServicesLine,
@@ -32,6 +33,7 @@ import {
   penaltyText,
   proratedWindowNote,
   reasonEntries,
+  reasonLabel,
   reconciliationText,
   statusExplanation,
   statusLabel,
@@ -209,6 +211,20 @@ export function buildHealth(input: {
     })),
     ingestion: buildIngestionView(input.ingestion),
   };
+}
+
+export type UnusableRowView = { pirKey: string; partner: string; merchantId: string; service: string; started: string; rawMinutes: string; reasons: string[] };
+
+export function unusableRows(rows: readonly UnusableRow[]): UnusableRowView[] {
+  return rows.map((row) => ({
+    pirKey: row.pirKey,
+    partner: row.partner,
+    merchantId: row.partnerId === null ? "" : String(row.partnerId),
+    service: row.affectedService ?? "",
+    started: row.incidentStarted === null ? "" : formatUtcTimestamp(row.incidentStarted),
+    rawMinutes: row.rawOutageMinutes ?? "",
+    reasons: row.reasons.map((reason) => reasonLabel(reason)),
+  }));
 }
 
 /**
