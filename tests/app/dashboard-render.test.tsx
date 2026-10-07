@@ -64,6 +64,10 @@ function scoredRow(overrides: Partial<Extract<TechnicalRow, { kind: "scored" }>>
     projectedExhaustion: "2026-06-28T00:00:00.000Z",
     windowStart: "2026-06-01T00:00:00.000Z",
     nextTierStartsAfterMinutes: 21.6,
+    windowMinutes: 43200,
+    elapsedMinutes: 21600,
+    history: [],
+    comparison: { kind: "insufficient_history", coveredMonths: 0, monthsWithDowntime: 0 },
     sourceClause: "Schedule A, section 4",
     services: ["payments"],
     includesScopedServices: null,
@@ -101,6 +105,7 @@ function trackingRow(overrides: Partial<Extract<TechnicalRow, { kind: "tracking_
       medianMinutes: 10,
       versusMedian: "above",
     },
+    history: [],
     outages: [
       {
         pirKey: "GTO-543",

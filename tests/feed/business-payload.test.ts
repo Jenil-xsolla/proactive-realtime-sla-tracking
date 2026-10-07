@@ -67,6 +67,11 @@ describe("business feed payload", () => {
     expect(technical).toContain('"windowStart"');
     expect(business).not.toContain("FIXTURE — not a contract clause");
     expect(business).toContain('"kind":"scored"');
+    expect(business).toContain('"partnerId":"scopely"');
+    expect(business).toContain('"history":[');
+    expect(business).toContain('"windowMinutes":');
+    expect(business).toContain('"target":0.999');
+    expect(business).toContain('"versusMedian":');
     expect(business).not.toContain(PIR_KEY);
     expect(business).not.toContain("151639");
     expect(business).not.toContain("ada");

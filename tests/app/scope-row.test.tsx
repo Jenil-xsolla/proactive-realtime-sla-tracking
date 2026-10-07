@@ -18,6 +18,7 @@ const boundary: TechnicalRow = {
     coveredMonths: 6,
     monthsWithDowntime: 0,
   },
+  history: [],
   outages: [
     {
       pirKey: "GTO-543",

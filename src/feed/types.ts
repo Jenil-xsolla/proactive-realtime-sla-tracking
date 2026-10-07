@@ -1,5 +1,5 @@
 import type { IngestionHealth, OutageHealth, OutagePartition, OutageProvenance, UnresolvedValue, UnusableReason } from "@/data";
-import type { BaselineComparison, PenaltyFigure, StatusReason } from "@/engine";
+import type { BaselineComparison, MonthHistory, PenaltyFigure, StatusReason } from "@/engine";
 import type { SeverityId } from "@/registry";
 import type { InvalidContractTerms, SlaTermsProvider } from "@/terms";
 import type { ViewerRole } from "./viewer";
@@ -80,6 +80,7 @@ export type TechnicalRow =
       usedMinutes: number;
       incidentCount: number;
       comparison: BaselineComparison;
+      history: MonthHistory[];
       outages: TechnicalOutage[];
     }
   | {
@@ -97,6 +98,10 @@ export type TechnicalRow =
       windowStart: string;
       /** Null when the penalty is not tiered, or no later tier remains. */
       nextTierStartsAfterMinutes: number | null;
+      windowMinutes: number;
+      elapsedMinutes: number;
+      history: MonthHistory[];
+      comparison: BaselineComparison;
       /** Empty when the contract file omitted it. */
       sourceClause: string;
       /** Registry service ids this scope names. Empty for a catch-all. */
@@ -112,22 +117,33 @@ export type BusinessRow =
   | {
       kind: "tracking_only";
       partner: string;
+      /** Registry slug, for links. Not the merchant id. */
+      partnerId: string;
       service: string;
       usedMinutes: number;
       incidentCount: number;
       comparison: string;
+      history: MonthHistory[];
+      versusMedian: "above" | "equal" | "below" | null;
     }
   | {
       kind: "scored";
       partner: string;
+      partnerId: string;
       scope: string;
       status: "meeting" | "at_risk" | "breaching";
+      /** Uptime target as a fraction, as the contract states it. */
+      target: number;
       consumedBudget: {
         usedMinutes: number;
         allowedMinutes: number;
         /** Null when the allowance is zero and the ratio is undefined. */
         fraction: number | null;
       };
+      windowMinutes: number;
+      elapsedMinutes: number;
+      history: MonthHistory[];
+      versusMedian: "above" | "equal" | "below" | null;
       projectedExhaustion: string | null;
       /** Incurred and projected stay separate. A percent is the credit; the other two kinds are not numbers. */
       creditPercentage: {

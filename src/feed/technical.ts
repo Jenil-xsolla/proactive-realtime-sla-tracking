@@ -24,6 +24,7 @@ export function toTechnicalView(
         usedMinutes: evaluation.usedMinutes,
         incidentCount: evaluation.incidentCount,
         comparison: evaluation.comparison,
+        history: evaluation.history,
         outages: rows,
       };
     }
@@ -44,6 +45,10 @@ export function toTechnicalView(
           : evaluation.projectedExhaustion.toISOString(),
       windowStart: evaluation.windowStart.toISOString(),
       nextTierStartsAfterMinutes: evaluation.nextTierStartsAfterMinutes,
+      windowMinutes: evaluation.windowMinutes,
+      elapsedMinutes: evaluation.elapsedMinutes,
+      history: evaluation.history,
+      comparison: evaluation.comparison,
       sourceClause: sourceClauseOf(scope),
       services: scope?.kind === "service" ? scope.services : [],
       includesScopedServices: scope?.kind === "catch_all" ? scope.includesScopedServices : null,

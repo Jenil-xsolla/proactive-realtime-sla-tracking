@@ -23,3 +23,8 @@ export function serviceLabel(id: string): string {
 export function severityLabel(id: string): string {
   return SEVERITIES.find((severity) => severity.id === id)?.displayName ?? id;
 }
+
+/** External merchant ids from the registry. Empty for an unknown id. Technical role only. */
+export function partnerMerchantIds(id: string): number[] {
+  return [...(PARTNERS.find((partner) => partner.id === id)?.merchantIds ?? [])];
+}

@@ -4,12 +4,13 @@ export { getSlaHealth } from "./health";
 export {
   listPilotPartners,
   partnerLabel,
+  partnerMerchantIds,
   serviceLabel,
   severityLabel,
   type PilotPartner,
 } from "./labels";
 export { toTechnicalView } from "./technical";
-export type { BaselineComparison, PenaltyFigure, StatusReason } from "@/engine";
+export type { BaselineComparison, MonthHistory, PenaltyFigure, StatusReason } from "@/engine";
 export type {
   BusinessRow,
   FeedSources,

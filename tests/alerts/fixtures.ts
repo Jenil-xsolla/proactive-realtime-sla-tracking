@@ -32,6 +32,10 @@ export function scoredRow(
     projectedExhaustion: null,
     windowStart: "2026-09-01T00:00:00.000Z",
     nextTierStartsAfterMinutes: null,
+    windowMinutes: 43200,
+    elapsedMinutes: 21600,
+    history: [],
+    comparison: { kind: "insufficient_history", coveredMonths: 0, monthsWithDowntime: 0 },
     sourceClause: "Schedule A",
     services: ["payments"],
     includesScopedServices: null,
@@ -81,6 +85,7 @@ export function trackingRow(input: {
     usedMinutes: input.usedMinutes,
     incidentCount: 1,
     comparison: input.comparison,
+    history: [],
     outages: [
       {
         pirKey: "GTO-100",
