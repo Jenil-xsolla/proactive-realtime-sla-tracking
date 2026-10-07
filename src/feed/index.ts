@@ -5,6 +5,7 @@ export {
   listPilotPartners,
   partnerLabel,
   partnerMerchantIds,
+  scopeTitle,
   serviceLabel,
   severityLabel,
   type PilotPartner,
@@ -12,6 +13,7 @@ export {
 export { toTechnicalView } from "./technical";
 export type { BaselineComparison, MonthHistory, PenaltyFigure, StatusReason } from "@/engine";
 export type {
+  BusinessCredit,
   BusinessRow,
   FeedSources,
   IngestionCounts,

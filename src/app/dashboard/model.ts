@@ -1,10 +1,9 @@
-import { contractedServiceIds } from "@/registry";
 import {
   listPilotPartners,
   monthKeysThrough,
   partnerLabel,
+  scopeTitle,
   serviceLabel,
-  severityLabel,
   windowFromMonthKey,
   windowPhase,
   type IngestionHealthDetail,
@@ -24,7 +23,6 @@ import {
   ROW_UNAVAILABLE,
   UNAVAILABLE,
   comparisonText,
-  computedEnd,
   formatMinutes,
   formatTarget,
   formatUtcTimestamp,
@@ -35,14 +33,15 @@ import {
   proratedWindowNote,
   reasonEntries,
   reconciliationText,
-  reviewLine,
   statusExplanation,
   statusLabel,
   ticketHref,
   tierDistanceText,
   unresolvedValuesSummary,
-  windowMinutesLabel,
 } from "./copy";
+import { toOutageViews, type OutageView } from "./outage-view";
+
+export type { OutageView } from "./outage-view";
 
 export type MonthOption = {
   key: string;
@@ -74,21 +73,6 @@ export type HealthView = {
   reasons: { key: string; label: string; count: number }[];
   invalidTerms: { partner: string; label: string; message: string }[];
   ingestion: IngestionView;
-};
-
-export type OutageView = {
-  pirKey: string;
-  href: string | null;
-  started: string;
-  ended: string;
-  minutesLabel: string;
-  service: string;
-  severity: string;
-  review: string | null;
-  merchantId: string | null;
-  source: string | null;
-  mergeGroup: string;
-  countedMinutes: number;
 };
 
 export type ScoredDetails = {
@@ -510,28 +494,7 @@ function withBacktest(partners: PartnerView[], backtest: BacktestAttachment | nu
 }
 
 function toScopeView(partnerId: string, row: TechnicalRow, index: number): ScopeView {
-  const outages = [...row.outages]
-    .sort((left, right) => {
-      const byTime = right.incidentStarted.localeCompare(left.incidentStarted);
-      if (byTime !== 0) {
-        return byTime;
-      }
-      return right.pirKey.localeCompare(left.pirKey);
-    })
-    .map((outage) => ({
-      pirKey: outage.pirKey,
-      href: ticketHref(outage.pirUrl),
-      started: formatUtcTimestamp(outage.incidentStarted),
-      ended: computedEnd(outage.incidentStarted, outage.totalMinutes),
-      minutesLabel: windowMinutesLabel(outage.totalMinutes, outage.minutesInWindow),
-      service: serviceLabel(outage.service),
-      severity: severityLabel(outage.severity),
-      review: reviewLine(outage),
-      merchantId: outage.partnerId === null ? null : String(outage.partnerId),
-      source: outage.source,
-      mergeGroup: outage.mergeGroup,
-      countedMinutes: outage.countedMinutes,
-    }));
+  const outages = toOutageViews(row.outages);
   const reconciliation = outages.length === 0 ? "" : reconciliationText(outages);
 
   if (row.kind === "tracking_only") {
@@ -594,19 +557,6 @@ function affectedLine(scopeTitle: string, filedServices: readonly string[]): str
   const named = new Set(scopeTitle.split(", "));
   const sameService = filed.length === named.size && filed.every((service) => named.has(service));
   return sameService ? null : affectedServicesLine(filed);
-}
-
-function scopeTitle(row: Extract<TechnicalRow, { kind: "scored" }>): string {
-  if (row.services.length > 0) {
-    return contractedServiceIds(row.services).map((service) => serviceLabel(service)).join(", ");
-  }
-  if (row.includesScopedServices === true) {
-    return "All services";
-  }
-  if (row.includesScopedServices === false) {
-    return "General Scope";
-  }
-  return row.scopeId;
 }
 
 function phaseFor(windowKey: string, asOf: Date): "open" | "settled" {
