@@ -8,7 +8,7 @@ export function OverviewPage({ view }: { view: OverviewView }) {
     <>
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-        <p className="text-sm text-muted-foreground">{view.summary}</p>
+        {view.summary === "" ? null : <p className="text-sm text-muted-foreground">{view.summary}</p>}
         {view.settledNote === null ? null : <p className="text-sm text-muted-foreground">{view.settledNote}</p>}
         {view.failure === null ? null : <p role="alert" className="text-sm text-danger">{view.failure}</p>}
       </header>

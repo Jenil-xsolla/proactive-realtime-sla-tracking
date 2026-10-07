@@ -59,6 +59,8 @@ export const HEALTH_UNAVAILABLE =
 export const ZERO_COVERAGE_NOTE =
   "No resolved outage in the extract. Distinct from zero minutes in the selected window.";
 
+export const UNUSABLE_ROWS_UNAVAILABLE = "Unusable rows could not be loaded.";
+
 export const INGESTION_FAILED_LABEL = "Failed PIRs";
 export const INGESTION_UNRESOLVED_LABEL = "PIRs with unresolved values";
 export const INGESTION_WITHOUT_MESSAGE_LABEL = "Captured without a Slack message";
@@ -436,17 +438,18 @@ export function summaryLine(terms: number, partners: number, trackingOnly: numbe
 
 export function railLine(input: {
   terms: number;
-  outages: number;
+  /** Null when the outage count is unknown; the segment is then omitted, never printed as zero. */
+  outages: number | null;
   minutes: number;
   trackingOnly: boolean;
   services?: number;
 }): string {
-  const outages = `${input.outages} ${input.outages === 1 ? "outage" : "outages"}`;
+  const outages = input.outages === null ? [] : [`${input.outages} ${input.outages === 1 ? "outage" : "outages"}`];
   if (input.trackingOnly) {
     const services = input.services ?? 0;
-    return `${services} ${services === 1 ? "service" : "services"} · ${outages} · ${input.minutes.toFixed(1)} min recorded`;
+    return [`${services} ${services === 1 ? "service" : "services"}`, ...outages, `${input.minutes.toFixed(1)} min recorded`].join(" · ");
   }
-  return `${input.terms} ${input.terms === 1 ? "term" : "terms"} · ${outages} · ${input.minutes.toFixed(1)} min`;
+  return [`${input.terms} ${input.terms === 1 ? "term" : "terms"}`, ...outages, `${input.minutes.toFixed(1)} min`].join(" · ");
 }
 
 export function alertScopeLabel(scopeId: string, title: (scopeId: string) => string): string {

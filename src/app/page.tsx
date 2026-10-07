@@ -15,7 +15,7 @@ function single(value: string | string[] | undefined): string | undefined {
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ window?: string | string[] }> }) {
   noStore();
   const params = await searchParams;
-  const workspace = await loadWorkspace({ window: single(params.window) });
+  const workspace = await loadWorkspace({ window: single(params.window), windowPath: "/" });
   const nav = buildNav({
     windowKey: workspace.frame.windowKey,
     role: workspace.role,

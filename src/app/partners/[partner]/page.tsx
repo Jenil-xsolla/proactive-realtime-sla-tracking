@@ -23,7 +23,11 @@ export default async function PartnerPage({
   noStore();
   const { partner: id } = await params;
   const query = await searchParams;
-  const workspace = await loadWorkspace({ window: single(query.window), backtestPartner: single(query.backtest) === "1" ? id : undefined });
+  const workspace = await loadWorkspace({
+    window: single(query.window),
+    windowPath: `/partners/${id}`,
+    backtestPartner: single(query.backtest) === "1" ? id : undefined,
+  });
   const partner = workspace.partners.find((entry) => entry.id === id);
   if (partner === undefined) {
     notFound();

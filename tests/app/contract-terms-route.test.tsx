@@ -227,6 +227,21 @@ describe("contract terms routes and technical view", () => {
     expect(again).toContain("Last saved by grace");
   });
 
+  it("keeps a window passed in the query on the sidebar links, and hides the month picker", async () => {
+    await openDb();
+    const html = renderToStaticMarkup(
+      await PartnerTermsPage({
+        params: Promise.resolve({ partner: "niantic" }),
+        searchParams: Promise.resolve({ window: "2026-06" }),
+      }),
+    );
+    const sidebar = /<nav[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
+    expect(sidebar).toContain('href="/?window=2026-06"');
+    expect(sidebar).toContain('href="/partners/niantic?window=2026-06"');
+    expect(html).toContain('href="/partners/niantic?window=2026-06"');
+    expect(html).not.toContain("Window");
+  });
+
   it("does not score a draft, and scores once the same terms are activated", async () => {
     const database = await openDb();
 

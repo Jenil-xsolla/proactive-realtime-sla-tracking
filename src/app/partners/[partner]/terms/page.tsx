@@ -19,14 +19,16 @@ export default async function PartnerTermsPage({
   searchParams,
 }: {
   params: Promise<{ partner: string }>;
-  searchParams: Promise<{ edit?: string | string[] }>;
+  searchParams: Promise<{ edit?: string | string[]; window?: string | string[] }>;
 }) {
   noStore();
   const { partner } = await params;
   if (!isPartnerId(partner)) {
     notFound();
   }
-  const workspace = await loadWorkspace({});
+  const query = await searchParams;
+  const requested = Array.isArray(query.window) ? query.window[0] : query.window;
+  const workspace = await loadWorkspace({ window: requested });
   if (workspace.role === "business") {
     notFound();
   }
@@ -38,7 +40,6 @@ export default async function PartnerTermsPage({
     health: healthBadge(workspace.health),
     active: { kind: "partner", id: partner },
   });
-  const query = await searchParams;
   const edit = Array.isArray(query.edit) ? query.edit[0] : query.edit;
   const row = await readContractTermsForPartner(getDatabase(), partner);
   const name = partnerLabel(partner);
@@ -48,6 +49,7 @@ export default async function PartnerTermsPage({
     <Shell
       nav={nav}
       frame={{ ...workspace.frame, chip: workspace.chip }}
+      showWindow={false}
       breadcrumb={[
         { label: "Overview", href: withWindow("/", workspace.frame.windowKey) },
         { label: name, href: withWindow(`/partners/${partner}`, workspace.frame.windowKey) },

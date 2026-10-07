@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { UNUSABLE_REASONS } from "@/data";
 import { healthBadge } from "@/app/dashboard/badges";
-import { HEALTH_UNAVAILABLE, INGESTION_HEALTH_UNAVAILABLE, INGESTION_FAILED_LABEL, reasonLabel } from "@/app/dashboard/copy";
+import { HEALTH_UNAVAILABLE, INGESTION_HEALTH_UNAVAILABLE, INGESTION_FAILED_LABEL, UNUSABLE_ROWS_UNAVAILABLE, reasonLabel } from "@/app/dashboard/copy";
 import { HealthPage } from "@/app/dashboard/health-page";
 import { buildHealth, unusableRows } from "@/app/dashboard/model";
 import type { SlaFeed } from "@/feed";
@@ -59,7 +59,8 @@ describe("health page", () => {
   it("shows the unavailable alert in place of the unusable table while tiles still render", () => {
     const health = buildHealth({ health: feedHealth(), ingestion: { status: "error" }, invalidTerms: [] });
     const html = renderToStaticMarkup(<HealthPage health={health} unusable={null} />);
-    expect(html).toContain(HEALTH_UNAVAILABLE);
+    expect(html).toContain(UNUSABLE_ROWS_UNAVAILABLE);
+    expect(html).not.toContain(HEALTH_UNAVAILABLE);
     expect(html).toContain('role="alert"');
     expect(html).not.toContain("<table");
     for (const label of TILE_LABELS) expect(html).toContain(label);

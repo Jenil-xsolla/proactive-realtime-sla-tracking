@@ -44,7 +44,7 @@ export type Workspace = {
   failure: string | null;
   /** Null for business. */
   health: HealthView | { status: "error" } | null;
-  /** Technical only. Null when the health read failed. */
+  /** Technical only, and only when requested with `unusable: true`. Null otherwise, and when the read failed. */
   unusable: UnusableRow[] | null;
   /** Null for business. */
   alerts: AlertStateRow[] | { status: "error" } | null;
@@ -53,8 +53,13 @@ export type Workspace = {
   backtest: BacktestAttachment | null;
 };
 
-/** One feed read per request. Every page derives its sidebar, tiles, and tables from the result. */
-export async function loadWorkspace(input: { window?: string; backtestPartner?: string } = {}): Promise<Workspace> {
+/**
+ * One feed read per request. Every page derives its sidebar, tiles, and tables from the result.
+ * `windowPath` is the route the month picker reloads; `unusable` opts in to the second health read.
+ */
+export async function loadWorkspace(
+  input: { window?: string; backtestPartner?: string; windowPath?: string; unusable?: boolean } = {},
+): Promise<Workspace> {
   noStore();
   const asOf = new Date();
   const resolved = resolveDashboardWindow(input.window, asOf);
@@ -63,7 +68,7 @@ export async function loadWorkspace(input: { window?: string; backtestPartner?: 
     windowKey: resolved.key,
     windowTitle: monthTitle(resolved.key),
     phase,
-    months: buildMonthOptions(asOf, resolved.key),
+    months: buildMonthOptions(asOf, resolved.key, input.windowPath),
     asOfLabel: formatUtcTimestamp(asOf.toISOString()),
   };
 
@@ -93,6 +98,10 @@ export async function loadWorkspace(input: { window?: string; backtestPartner?: 
     feed = await getSlaFeed({ asOf, window: resolved.window, viewer });
   } catch (error) {
     console.error("[sla-dashboard] feed", error);
+    const [alerts, backtest] =
+      role === "technical"
+        ? await Promise.all([loadAlerts(), loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, null)])
+        : [null, null];
     return {
       role,
       frame,
@@ -100,10 +109,10 @@ export async function loadWorkspace(input: { window?: string; backtestPartner?: 
       failure: QUERY_FAILED,
       health: role === "technical" ? { status: "error" } : null,
       unusable: null,
-      alerts: role === "technical" ? await loadAlerts() : null,
+      alerts,
       chip: { label: HEALTH_UNAVAILABLE_CHIP, tone: "danger", href: role === "technical" ? "/health" : null },
       termsIndex,
-      backtest: role === "technical" ? await loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, null) : null,
+      backtest,
     };
   }
 
@@ -130,17 +139,22 @@ export async function loadWorkspace(input: { window?: string; backtestPartner?: 
     partnersWithNoRows: health.partnersWithNoRows.length,
     invalidTerms: health.invalidTerms.length,
   });
+  const [alerts, backtest, unusable] = await Promise.all([
+    loadAlerts(),
+    loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, feed.rows),
+    input.unusable === true ? loadUnusable(asOf, viewer) : Promise.resolve(null),
+  ]);
   return {
     role: "technical",
     frame,
     partners,
     failure: null,
     health,
-    unusable: await loadUnusable(asOf, viewer),
-    alerts: await loadAlerts(),
+    unusable,
+    alerts,
     chip: { ...chip, href: "/health" },
     termsIndex,
-    backtest: await loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, feed.rows),
+    backtest,
   };
 }
 

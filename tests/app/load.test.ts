@@ -105,7 +105,7 @@ describe("loadWorkspace", () => {
     expect(workspace.partners.find((partner) => partner.id === "scopely")?.terms).toHaveLength(1);
     expect(workspace.partners.every((partner) => !partner.unavailable)).toBe(true);
     expect(workspace.health).toMatchObject({ usableCount: 1, droppedRows: 0 });
-    expect(workspace.unusable).toEqual([]);
+    expect(workspace.unusable).toBeNull();
     expect(workspace.termsIndex?.bound.has("scopely")).toBe(true);
     expect(workspace.termsIndex?.draft.size).toBe(0);
   });
@@ -153,5 +153,33 @@ describe("loadWorkspace", () => {
     mocks.getSlaFeed.mockResolvedValue(technicalFeed());
     await loadWorkspace({});
     expect(mocks.getSlaFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it("never reads the second health view by default, and reads it once when asked", async () => {
+    mocks.getSlaFeed.mockResolvedValue(technicalFeed());
+    const plain = await loadWorkspace({});
+    expect(mocks.getSlaHealth).not.toHaveBeenCalled();
+    expect(plain.unusable).toBeNull();
+
+    const asked = await loadWorkspace({ unusable: true });
+    expect(mocks.getSlaHealth).toHaveBeenCalledTimes(1);
+    expect(asked.unusable).toEqual([]);
+    expect(mocks.getSlaFeed).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps unusable null when the opted-in health read fails", async () => {
+    mocks.getSlaFeed.mockResolvedValue(technicalFeed());
+    mocks.getSlaHealth.mockRejectedValue(new Error("db down"));
+    const workspace = await loadWorkspace({ unusable: true });
+    expect(workspace.unusable).toBeNull();
+    expect(workspace.health).toMatchObject({ usableCount: 1 });
+  });
+
+  it("builds month hrefs on the page's own path", async () => {
+    mocks.getSlaFeed.mockResolvedValue(technicalFeed());
+    const workspace = await loadWorkspace({ windowPath: "/alerts" });
+    expect(workspace.frame.months.every((month) => month.href.startsWith("/alerts?window="))).toBe(true);
+    const home = await loadWorkspace({});
+    expect(home.frame.months.every((month) => month.href.startsWith("/?window="))).toBe(true);
   });
 });

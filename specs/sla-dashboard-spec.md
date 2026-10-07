@@ -28,7 +28,7 @@ This spec covers seven subsystems:
 | 7   | Ingestion and corrections           | One — detailed in the companion design    |
 
 
-Slice one is independently useful and shippable. The business view follows as soon as real contracts land; it is deliberately not bundled with upload and extraction, which carry an unresolved governance dependency.
+Slice one is independently useful and shippable. The business view ships with the dashboard UI (`specs/2026-10-07-dashboard-ui-design.md`) on real terms only, and upload and extraction remain a separate slice because they carry an unresolved governance dependency.
 
 ---
 

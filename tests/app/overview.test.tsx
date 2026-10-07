@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { NO_ATTENTION, QUERY_FAILED, SETTLED_NOTE } from "@/app/dashboard/copy";
 import { buildOverview } from "@/app/dashboard/overview";
 import { OverviewPage } from "@/app/dashboard/overview-page";
-import { buildTechnicalPartners, unavailablePartners } from "@/app/dashboard/view";
+import { buildBusinessPartners, buildTechnicalPartners, unavailablePartners } from "@/app/dashboard/view";
 import type { TechnicalRow } from "@/feed";
-import { scoredRow } from "../support/rows";
+import { businessScoredRow, scoredRow } from "../support/rows";
 
 function partnersWith(rows: TechnicalRow[]) {
   return buildTechnicalPartners(rows, "open", "2026-09", { withTerms: new Set(["scopely", "niantic"]), bound: new Set(["scopely", "niantic"]), draft: new Set() });
@@ -55,8 +55,11 @@ describe("overview", () => {
   it("renders Unavailable tiles and error rows when the feed failed, never zeros", () => {
     const view = buildOverview({ partners: unavailablePartners(null, "technical"), phase: "open", windowKey: "2026-09", failure: QUERY_FAILED, role: "technical" });
     expect(view.tiles.every((tile) => tile.value === "Unavailable")).toBe(true);
+    expect(view.summary).toBe("");
     const html = renderToStaticMarkup(<OverviewPage view={view} />);
     expect(html).toContain(QUERY_FAILED);
+    expect(html).not.toContain("No terms");
+    expect(html).not.toContain("Monitoring");
     expect(view.rail).toHaveLength(11);
     expect(view.rail.every((card) => card.unavailable)).toBe(true);
     // One alert for the header, one for the attention slot, and one per rail card.
@@ -64,6 +67,15 @@ describe("overview", () => {
     expect(html).not.toContain("Tracking only</span>");
     expect(html).not.toContain("flagged");
     expect(html).not.toContain(">0<");
+  });
+
+  it("omits the outages segment from a business rail line, since business terms carry no outage count", () => {
+    const partners = buildBusinessPartners([businessScoredRow()], "open", "2026-09");
+    const view = buildOverview({ partners, phase: "open", windowKey: "2026-09", failure: null, role: "business" });
+    const line = view.rail.find((card) => card.id === "scopely")?.line;
+    expect(line).toBe("1 term · 18.4 min");
+    expect(line).not.toContain("outages");
+    expect(line).not.toContain("outage");
   });
 
   it("keeps incurred and projected credit apart, and never prints 0% for an unentered clause", () => {

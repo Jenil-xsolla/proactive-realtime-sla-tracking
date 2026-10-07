@@ -1,5 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, Tile } from "@/ui";
-import { HEALTH_UNAVAILABLE, INGESTION_FAILED_LABEL, INGESTION_HEALTH_UNAVAILABLE, INGESTION_UNRESOLVED_LABEL, INGESTION_WITHOUT_MESSAGE_LABEL, INVALID_CONTRACT_TERMS_LABEL, ZERO_COVERAGE_NOTE } from "./copy";
+import { HEALTH_UNAVAILABLE, INGESTION_FAILED_LABEL, INGESTION_HEALTH_UNAVAILABLE, INGESTION_UNRESOLVED_LABEL, INGESTION_WITHOUT_MESSAGE_LABEL, INVALID_CONTRACT_TERMS_LABEL, UNUSABLE_ROWS_UNAVAILABLE, ZERO_COVERAGE_NOTE } from "./copy";
 import type { HealthView, IngestionRow, UnusableRowView } from "./model";
 
 const HEADING = "text-xs font-medium uppercase tracking-wide text-muted-foreground";
@@ -42,7 +42,7 @@ export function HealthPage({ health, unusable }: { health: HealthView | { status
       <section aria-labelledby="unusable-rows-heading" className="flex flex-col gap-2">
         <h2 id="unusable-rows-heading" className="text-lg font-semibold tracking-tight">Unusable rows</h2>
         {unusable === null ? (
-          <p role="alert" className="text-sm text-danger">{HEALTH_UNAVAILABLE}</p>
+          <p role="alert" className="text-sm text-danger">{UNUSABLE_ROWS_UNAVAILABLE}</p>
         ) : unusable.length === 0 ? (
           <p className="text-sm text-foreground">None</p>
         ) : (

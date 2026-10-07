@@ -2,7 +2,15 @@ import { Chip } from "@/ui";
 import { WindowSelect } from "../dashboard/window-select";
 import type { ShellFrame } from "./shell";
 
-export function TopBar({ frame, breadcrumb }: { frame: ShellFrame; breadcrumb: { label: string; href?: string }[] }) {
+export function TopBar({
+  frame,
+  breadcrumb,
+  showWindow = true,
+}: {
+  frame: ShellFrame;
+  breadcrumb: { label: string; href?: string }[];
+  showWindow?: boolean;
+}) {
   const chip = <Chip tone={frame.chip.tone}>{frame.chip.label}</Chip>;
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-8 py-4">
@@ -21,7 +29,7 @@ export function TopBar({ frame, breadcrumb }: { frame: ShellFrame; breadcrumb: {
         ))}
       </ol>
       <div className="flex flex-wrap items-center gap-4">
-        <WindowSelect months={frame.months} title={frame.windowTitle} phase={frame.phase} />
+        {showWindow ? <WindowSelect months={frame.months} title={frame.windowTitle} phase={frame.phase} /> : null}
         <p className="font-mono text-xs tabular-nums text-muted-foreground">as of {frame.asOfLabel}</p>
         {frame.chip.href === null ? chip : <a href={frame.chip.href} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">{chip}</a>}
       </div>

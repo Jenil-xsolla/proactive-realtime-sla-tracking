@@ -19,6 +19,7 @@ import {
   ticketHref,
   unresolvedValuesSummary,
 } from "./copy";
+import { withWindow } from "./nav";
 
 export type { OutageView } from "./outage-view";
 
@@ -80,7 +81,7 @@ export type BacktestAttachment = {
   panel: BacktestPanel;
 };
 
-export function buildMonthOptions(asOf: Date, selectedKey: string): MonthOption[] {
+export function buildMonthOptions(asOf: Date, selectedKey: string, basePath = "/"): MonthOption[] {
   return monthKeysThrough(asOf)
     .map((key) => {
       const window = windowFromMonthKey(key);
@@ -89,7 +90,7 @@ export function buildMonthOptions(asOf: Date, selectedKey: string): MonthOption[
         key,
         title: monthTitle(key),
         phase,
-        href: `/?window=${key}`,
+        href: withWindow(basePath, key),
         selected: key === selectedKey,
       };
     })

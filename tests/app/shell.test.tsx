@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { buildMonthOptions } from "@/app/dashboard/model";
 import { buildNav, withWindow } from "@/app/dashboard/nav";
 import { Shell } from "@/app/shell/shell";
 import { unavailablePartners, type PartnerView } from "@/app/dashboard/view";
@@ -114,5 +115,25 @@ describe("shell", () => {
     expect(html).not.toContain("/health");
     expect(sidebarAnchor(html, "/?window=2026-09")).toContain('aria-current="page"');
     expect(sidebarAnchor(html, "/partners/scopely?window=2026-09")).toBeDefined();
+  });
+
+  it("points the month menu at the current route, so a partner page keeps its path", () => {
+    const months = buildMonthOptions(new Date("2026-09-23T15:58:00.000Z"), "2026-09", "/partners/scopely");
+    expect(months[0]?.href).toBe("/partners/scopely?window=2026-09");
+    expect(months.every((month) => month.href.startsWith("/partners/scopely?window="))).toBe(true);
+    expect(buildMonthOptions(new Date("2026-09-23T15:58:00.000Z"), "2026-09")[0]?.href).toBe("/?window=2026-09");
+    const nav = buildNav({ windowKey: "2026-09", role: "technical", partners: [partner("scopely", "Scopely")], alerts: { count: 0 }, health: { count: 0 }, active: { kind: "partner", id: "scopely" } });
+    const html = renderToStaticMarkup(<Shell nav={nav} frame={{ ...frame, months }} breadcrumb={[{ label: "Scopely" }]}><p /></Shell>);
+    expect(html).toContain("Window");
+    expect(html).toContain('href="/partners/scopely?window=2026-09"');
+    expect(html).toContain('href="/partners/scopely?window=2026-08"');
+    expect(html).not.toContain('href="/?window=2026-08"');
+  });
+
+  it("renders no Window menu when showWindow is false", () => {
+    const nav = buildNav({ windowKey: "2026-09", role: "technical", partners: [partner("scopely", "Scopely")], alerts: { count: 0 }, health: { count: 0 }, active: { kind: "health" } });
+    const html = renderToStaticMarkup(<Shell nav={nav} frame={frame} breadcrumb={[{ label: "Health" }]} showWindow={false}><p /></Shell>);
+    expect(html).not.toContain("Window");
+    expect(html).toContain("as of");
   });
 });

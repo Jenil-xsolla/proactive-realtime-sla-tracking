@@ -2,7 +2,7 @@ import { Sparkline } from "@/ui";
 import type { Status, TrendView } from "./view";
 
 const tones = { meeting: "neutral", at_risk: "warning", breaching: "danger" } as const;
-const marks = { up: "↑", down: "↓", flat: "→", none: "" } as const;
+const marks = { up: "↑", down: "↓", flat: "→" } as const;
 
 export function TrendSparkline({ trend, status }: { trend: TrendView; status: Status | null }) {
   const markTone = trend.mark === "up" ? "text-danger" : "text-muted-foreground";
@@ -18,7 +18,12 @@ export function TrendSparkline({ trend, status }: { trend: TrendView; status: St
         }))}
       />
       <span className={`font-mono text-xs leading-tight ${markTone}`}>
-        {marks[trend.mark]} {trend.text}
+        {trend.mark === "none" ? null : (
+          <>
+            <span aria-hidden="true">{marks[trend.mark]}</span>{" "}
+          </>
+        )}
+        {trend.text}
       </span>
     </span>
   );

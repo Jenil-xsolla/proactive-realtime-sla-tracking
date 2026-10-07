@@ -1,6 +1,6 @@
 # Dashboard UI: shell, overview, partner pages, alerts, health
 
-**Status:** design agreed 2026-10-07; not yet built
+**Status:** built 2026-10-07 on branch dashboard-ui
 **Date:** 2026-10-07
 **Parent spec:** `specs/sla-dashboard-spec.md`. This document revises its §9 (technical view). Where the two disagree on the technical view's structure, this document wins; everything else in the parent spec stands.
 **Companion:** `specs/2026-09-25-ingestion-in-app-design.md` (unchanged)
@@ -60,7 +60,7 @@ One `Shell` component wraps every page. Props: `nav: NavModel`, `breadcrumb`, `c
 
 **Layout.** Fixed-width left sidebar (`--sidebar-width`, a new layout token in `globals.css`, `17rem`), `bg-sidebar`, 1px `border-border` on its right edge. Main column: a top bar, then content with a max width of `90rem` and generous section spacing. Below `lg` the sidebar becomes a horizontal row of links above the content. Mobile only has to work, not shine.
 
-**Top bar.** Left: breadcrumb (`Overview`, or `Overview › Scopely`). Right, in order: `WindowSelect` (existing component, month plus "In progress" or "Settled"), the `as of` timestamp in mono, and the health chip. The health chip reads `No rows dropped` in neutral tone or `3 rows dropped` in warning tone, and links to `/health`. When health could not be loaded it reads `Health unavailable` in danger tone.
+**Top bar.** Left: breadcrumb (`Overview`, or `Overview › Scopely`). Right, in order: `WindowSelect` (existing component, month plus "In progress" or "Settled"), the `as of` timestamp in mono, and the health chip. The health chip reads `No rows dropped` in neutral tone or `3 rows dropped` in warning tone, and links to `/health`. When health could not be loaded it reads `Health unavailable` in danger tone. The top-bar month picker reloads the current route for the chosen month; routes that are not windowed (`/health` and the terms page) hide it and pass the window through to their links.
 
 **Sidebar.**
 

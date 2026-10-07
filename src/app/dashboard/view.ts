@@ -145,6 +145,18 @@ function creditSummary(incurred: string, projected: string, numeric: boolean): s
   return !numeric && incurred === projected ? incurred : creditText(incurred, projected);
 }
 
+/** One ticket per PIR: a multi-service scope has one outage row per service for the same PIR. Order and first href are kept. */
+function uniqueTickets(outages: readonly OutageView[]): TicketView[] {
+  const seen = new Set<string>();
+  const tickets: TicketView[] = [];
+  for (const outage of outages) {
+    if (seen.has(outage.pirKey)) continue;
+    seen.add(outage.pirKey);
+    tickets.push({ key: outage.pirKey, href: outage.href });
+  }
+  return tickets;
+}
+
 function technicalTerm(
   row: Extract<TechnicalRow, { kind: "scored" }>,
   phase: "open" | "settled",
@@ -184,7 +196,7 @@ function technicalTerm(
     nextTier: row.nextTierStartsAfterMinutes === null ? null : tierDistanceText(row.usedMinutes, row.nextTierStartsAfterMinutes),
     windowNote: proratedWindowNote(row.windowStart),
     clause: { text: clause === "" ? CLAUSE_NOT_RECORDED : clause, missing: clause === "" },
-    tickets: outages.map((outage) => ({ key: outage.pirKey, href: outage.href })),
+    tickets: uniqueTickets(outages),
     outages,
     reconciliation: outages.length === 0 ? "" : reconciliationText(outages),
   };

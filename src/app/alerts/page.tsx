@@ -13,7 +13,7 @@ export default async function AlertsRoute({ searchParams }: { searchParams: Prom
   noStore();
   const params = await searchParams;
   const requested = Array.isArray(params.window) ? params.window[0] : params.window;
-  const workspace = await loadWorkspace({ window: requested === "all" ? undefined : requested });
+  const workspace = await loadWorkspace({ window: requested === "all" ? undefined : requested, windowPath: "/alerts" });
   if (workspace.role === "business") {
     notFound();
   }

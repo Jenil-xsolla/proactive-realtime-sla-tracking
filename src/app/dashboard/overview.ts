@@ -1,4 +1,4 @@
-import { ADD_CONTRACT_TERMS, DRAFT_TERMS, NO_TARGET_NOTE, NO_TERMS, SETTLED_NOTE, UNAVAILABLE, VIEW_TERMS, railLine, summaryLine } from "./copy";
+import { ADD_CONTRACT_TERMS, DRAFT_TERMS, NO_TARGET_NOTE, SETTLED_NOTE, UNAVAILABLE, VIEW_TERMS, railLine, summaryLine } from "./copy";
 import { withWindow } from "./nav";
 import type { PartnerView, Status, TermView } from "./view";
 
@@ -21,13 +21,15 @@ function countedMinutes(partner: PartnerView): number {
   return partner.terms.reduce((sum, term) => sum + term.usedMinutes, 0) + partner.tracking.reduce((sum, row) => sum + row.usedMinutes, 0);
 }
 
-function outageCount(partner: PartnerView): number {
+/** Null when the count is unknown: business terms carry no outage records, so zero would be a false zero. */
+function outageCount(partner: PartnerView): number | null {
+  if (partner.terms.some((term) => term.tickets === null)) return null;
   const keys = new Set<string>();
   for (const term of partner.terms) for (const ticket of term.tickets ?? []) keys.add(ticket.key);
   for (const row of partner.tracking) for (const outage of row.outages ?? []) keys.add(outage.pirKey);
   if (keys.size > 0) return keys.size;
-  // Business rows carry counts, not keys.
-  return partner.terms.reduce((sum, term) => sum + (term.tickets?.length ?? 0), 0) + partner.tracking.reduce((sum, row) => sum + row.outageCount, 0);
+  // Business tracking rows carry counts, not keys.
+  return partner.tracking.reduce((sum, row) => sum + row.outageCount, 0);
 }
 
 function consumed(term: TermView): number {
@@ -89,7 +91,7 @@ export function buildOverview(input: {
     }));
 
   return {
-    summary: input.failure !== null ? NO_TERMS : summaryLine(terms.length, scoredPartners, trackingOnly),
+    summary: input.failure !== null ? "" : summaryLine(terms.length, scoredPartners, trackingOnly),
     settledNote: input.phase === "settled" ? SETTLED_NOTE : null,
     failure: input.failure,
     tiles,

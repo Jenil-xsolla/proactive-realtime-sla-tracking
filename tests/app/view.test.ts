@@ -60,6 +60,32 @@ describe("view model", () => {
     expect(trend.summary).toContain("September 2026: 5.0 min");
   });
 
+  it("lists one ticket per PIR when a multi-service scope has one outage row per service", () => {
+    const base = (scoredRow() as Extract<TechnicalRow, { kind: "scored" }>).outages[0]!;
+    const shared = { ...base, pirKey: "GTO-700", pirUrl: "https://jira.example/browse/GTO-700" };
+    const [scopely] = buildTechnicalPartners(
+      [
+        scoredRow({
+          services: ["payments", "login"],
+          outages: [
+            { ...shared, service: "payments", incidentStarted: "2026-09-12T10:00:00.000Z", mergeGroup: "1" },
+            { ...shared, service: "login", incidentStarted: "2026-09-12T10:00:00.000Z", mergeGroup: "2" },
+            { ...shared, pirKey: "GTO-701", pirUrl: null, service: "payments", incidentStarted: "2026-09-03T10:00:00.000Z", mergeGroup: "3" },
+          ],
+        }),
+      ],
+      "open",
+      "2026-09",
+      null,
+    );
+    const term = scopely?.terms[0];
+    expect(term?.outages).toHaveLength(3);
+    expect(term?.tickets).toEqual([
+      { key: "GTO-700", href: "https://jira.example/browse/GTO-700" },
+      { key: "GTO-701", href: null },
+    ]);
+  });
+
   it("reports the empty tickets sentence for a term with no outages", () => {
     const [scopely] = buildTechnicalPartners([scoredRow({ outages: [], usedMinutes: 0 })], "open", "2026-09", null);
     expect(scopely?.terms[0]?.tickets).toEqual([]);

@@ -94,15 +94,15 @@ export type OutageRef<S extends string = string> = {
 };
 
 /**
- * Comparison against the covered prior months only. A month that starts
- * before data coverage is omitted, never counted as zero downtime.
- */
-/**
  * Used minutes for one prior calendar month. `null` when the month starts
  * before data coverage: unknown, never a clean zero.
  */
 export type MonthHistory = { month: string; usedMinutes: number | null };
 
+/**
+ * Comparison against the covered prior months only. A month that starts
+ * before data coverage is omitted, never counted as zero downtime.
+ */
 export type BaselineComparison =
   | {
       kind: "insufficient_history";

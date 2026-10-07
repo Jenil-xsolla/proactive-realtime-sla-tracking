@@ -20,8 +20,15 @@ describe("trend column", () => {
     expect(html).toContain("<title>September 2026: 76.0 min</title>");
   });
 
-  it("writes n/a when there is no comparison", () => {
+  it("writes n/a when there is no comparison, with no leading space or glyph", () => {
     const html = renderToStaticMarkup(<TrendSparkline trend={buildTrend(history, "2026-09", 5, null)} status={null} />);
     expect(html).toContain("n/a");
+    expect(html).not.toMatch(/[↑↓→]/);
+    expect(html).toContain('text-muted-foreground">n/a</span>');
+  });
+
+  it("hides the arrow glyph from assistive technology", () => {
+    const html = renderToStaticMarkup(<TrendSparkline trend={buildTrend(history, "2026-09", 76, "above")} status="breaching" />);
+    expect(html).toContain('<span aria-hidden="true">↑</span> above median');
   });
 });
