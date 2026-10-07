@@ -1,6 +1,6 @@
 /**
  * Status never rides on colour alone: the label is required and visible.
- * Warning and danger exist for the scored view. Nothing mounts this yet.
+ * Warning and danger are the at-risk and breaching tokens.
  */
 const variants = {
   neutral: "border-border bg-secondary text-foreground",

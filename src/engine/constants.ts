@@ -1,9 +1,11 @@
 /**
- * Provisional engineering estimates pending calibration against historical
- * replay, not agreed policy. Calibrate against GTOC-42 before enabling alerts.
+ * Calibrated 2026-10-07 against historical replay (GTOC-42) of every
+ * contract-bound partner, data range 2026-01-01 through 2026-10-07, one UTC
+ * day per step. Resulting volume over that range: 4 scored alerts and 6
+ * tracking-only heads-ups.
  */
 export const MIN_ELAPSED = 0.2;
-export const MIN_CONSUMPTION = 0.1;
+export const MIN_CONSUMPTION = 0.5;
 export const HIGH_CONSUMPTION = 0.75;
 export const MIN_BASELINE_MONTHS = 3;
 

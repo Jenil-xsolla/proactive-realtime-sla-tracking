@@ -48,7 +48,7 @@ export async function getSlaFeed(input: {
     asOf,
     health,
     role: input.viewer.role,
-    rows: toTechnicalView(evaluations, partition.usable),
+    rows: toTechnicalView(evaluations, partition.usable, scopes),
     ingestion: toIngestionDetail(ingestionResult),
     invalidTerms,
   };

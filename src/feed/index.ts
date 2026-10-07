@@ -9,7 +9,7 @@ export {
   type PilotPartner,
 } from "./labels";
 export { toTechnicalView } from "./technical";
-export type { BaselineComparison } from "@/engine";
+export type { BaselineComparison, PenaltyFigure, StatusReason } from "@/engine";
 export type {
   BusinessRow,
   FeedSources,

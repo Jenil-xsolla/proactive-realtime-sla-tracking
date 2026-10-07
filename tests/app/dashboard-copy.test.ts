@@ -7,14 +7,19 @@ import {
   windowPhase,
   type BaselineComparison,
 } from "@/feed";
+import type { StatusReason } from "@/feed";
 import {
   comparisonText,
   formatMinutes,
+  penaltyText,
+  proratedWindowNote,
   reasonLabel,
   reconciliationText,
   SETTLED_LABEL,
   SETTLED_NOTE,
+  statusExplanation,
   ticketHref,
+  tierDistanceText,
   truncate,
 } from "@/app/dashboard/copy";
 
@@ -90,8 +95,47 @@ describe("dashboard copy", () => {
 
   it("keeps an unavailable figure distinct from zero minutes", () => {
     expect(formatMinutes(0)).toBe("0 min");
+    expect(formatMinutes(11.52)).toBe("11.52 min");
     expect(formatMinutes(Number.NaN)).toBe("Unavailable");
     expect(formatMinutes(Number.NaN)).not.toBe(formatMinutes(0));
+  });
+
+  it("renders a penalty from its kind and keeps incurred off the projected figure", () => {
+    expect(penaltyText({ kind: "none", statement: "no penalty clause" })).toBe("no penalty clause");
+    expect(penaltyText({ kind: "unknown", statement: "penalty clause, not yet entered" })).toBe(
+      "penalty clause, not yet entered",
+    );
+    expect(penaltyText({ kind: "none", statement: "no penalty clause" })).not.toContain("0%");
+    expect(penaltyText({ kind: "unknown", statement: "penalty clause, not yet entered" })).not.toContain("0%");
+    expect(penaltyText({ kind: "credit", creditFraction: 0, amount: null })).toBe("0%");
+    expect(penaltyText({ kind: "credit", creditFraction: 0.1, amount: { amount: 1000, currency: "XXX" } })).toBe(
+      "10% · 1,000 XXX",
+    );
+    expect(tierDistanceText(18.4, 21.6)).toBe("18.4 of 21.6 min used; the next tier starts after 21.6 min");
+  });
+
+  it("builds the status sentence from the reason inputs", () => {
+    const reason: StatusReason = {
+      rule: "breaching",
+      fired: [],
+      elapsedFraction: 1,
+      consumedFraction: 1.2,
+      projectedMinutes: 30,
+      usedMinutes: 30,
+      allowedMinutes: 21.6,
+      burnRate: 1.2,
+    };
+    expect(statusExplanation(reason)).toBe("Downtime has used 30 min of the 21.6 min allowance for this window.");
+    expect(statusExplanation({ ...reason, rule: "meeting", consumedFraction: 0.2, usedMinutes: 4, projectedMinutes: 4 })).toBe(
+      "Downtime is within the allowance at this point in the window. 4 min of 21.6 min used.",
+    );
+  });
+
+  it("notes a mid-month window start and stays quiet when the window opens on the 1st", () => {
+    expect(proratedWindowNote("2027-06-15T00:00:00.000Z")).toBe(
+      "Starts 2027-06-15. Allowance is prorated to this shorter window.",
+    );
+    expect(proratedWindowNote("2026-06-01T00:00:00.000Z")).toBeNull();
   });
 
   it("keeps a stored https ticket URL and rejects anything else", () => {

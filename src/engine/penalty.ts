@@ -34,6 +34,12 @@ export function allowanceMinutes(target: number, windowMinutes: number): number 
   return (windowMinutes * missed) / BASIS_POINTS;
 }
 
+/** True when downtime has passed this tier's threshold. An exact landing has not. */
+function tierEntered(downtimeMs: number, windowMs: number, belowAvailability: number): boolean {
+  const missedBp = missedBasisPoints(belowAvailability);
+  return downtimeMs * BASIS_POINTS > windowMs * missedBp;
+}
+
 /**
  * Credit fraction for downtime against below-threshold tiers.
  * Compares integer milliseconds of downtime with integer basis points, so a
@@ -47,13 +53,47 @@ export function rawCredit(minutes: number, windowMinutes: number, tiers: readonl
   const windowMs = Math.round(windowMinutes * MINUTE_MS);
   let worst = 0;
   for (const tier of tiers) {
-    const missedBp = missedBasisPoints(tier.belowAvailability);
-    const belowTier = downtimeMs * BASIS_POINTS > windowMs * missedBp;
-    if (belowTier && tier.creditFraction > worst) {
+    if (tierEntered(downtimeMs, windowMs, tier.belowAvailability) && tier.creditFraction > worst) {
       worst = tier.creditFraction;
     }
   }
   return worst;
+}
+
+/**
+ * Downtime minutes after which the next credit tier applies.
+ * Uses the same strict comparison as `rawCredit`: landing exactly on a
+ * threshold has not entered that tier. Null when no later tier remains.
+ * `windowMinutes` is the scored window, already prorated when the scope
+ * starts mid-month.
+ */
+export function nextTierStartsAfterMinutes(
+  usedMinutes: number,
+  windowMinutes: number,
+  tiers: readonly PenaltyTier[],
+): number | null {
+  if (!(windowMinutes > 0) || !(usedMinutes >= 0)) {
+    return null;
+  }
+  const downtimeMs = Math.round(usedMinutes * MINUTE_MS);
+  const windowMs = Math.round(windowMinutes * MINUTE_MS);
+  let nearest: number | null = null;
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier.belowAvailability)) {
+      continue;
+    }
+    if (tierEntered(downtimeMs, windowMs, tier.belowAvailability)) {
+      continue;
+    }
+    const startsAfter = allowanceMinutes(tier.belowAvailability, windowMinutes);
+    if (!Number.isFinite(startsAfter)) {
+      continue;
+    }
+    if (nearest === null || startsAfter < nearest) {
+      nearest = startsAfter;
+    }
+  }
+  return nearest;
 }
 
 export function capAt(fraction: number, cap: number | null): number {

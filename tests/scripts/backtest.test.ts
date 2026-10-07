@@ -152,7 +152,7 @@ describe("backtest", () => {
     ]);
     expect(report.constants).toEqual({
       MIN_ELAPSED: 0.2,
-      MIN_CONSUMPTION: 0.1,
+      MIN_CONSUMPTION: 0.5,
       HIGH_CONSUMPTION: 0.75,
     });
   });

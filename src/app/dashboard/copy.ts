@@ -1,4 +1,4 @@
-import type { BaselineComparison } from "@/feed";
+import type { BaselineComparison, PenaltyFigure, StatusReason } from "@/feed";
 
 const MONTHS = [
   "January",
@@ -23,7 +23,27 @@ export const SETTLED_NOTE = "A late PIR can still change this window.";
 export const BACKTEST_TRACKING_ONLY =
   "Backtest runs once this partner's contract terms are bound. Tracking-only partners have no terms to replay.";
 
-export const BACKTEST_NOT_ON_SCREEN = "Historical replay is not available on this screen yet.";
+export const BACKTEST_FAILED =
+  "Historical replay could not be loaded. This is not a result of zero breaches.";
+
+export const BACKTEST_NO_EXPOSURE = "No exposure";
+
+export const BACKTEST_COUNT_NOTE =
+  "Trend and level each count on a step where that clause fired. Breaching and meeting each count alone.";
+
+export const CLAUSE_NOT_RECORDED = "Clause reference not yet recorded.";
+
+export const FILED_AGAINST = "Filed against";
+
+export const SLA_SECTION = "SLA";
+
+export const TRACKING_ONLY_SECTION = "Tracking only";
+
+export function affectedServicesLine(services: readonly string[]): string {
+  return `Affected: ${services.join(", ")}`;
+}
+
+export const EXHAUSTION_NONE = "None projected";
 
 export const ADD_CONTRACT_TERMS = "Add contract terms";
 
@@ -122,15 +142,108 @@ export function formatUtcTimestamp(iso: string): string {
   return `${year}-${month}-${day} ${hour}:${minute}:${second} UTC`;
 }
 
+export function formatMinuteValue(minutes: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  }).format(minutes);
+}
+
 export function formatMinutes(minutes: number): string {
   if (!Number.isFinite(minutes)) {
     return UNAVAILABLE;
   }
+  return `${formatMinuteValue(minutes)} min`;
+}
+
+/** A fraction rendered as a percent. 0.1 is 10%. 0 is 0%. */
+export function formatPercent(fraction: number): string {
+  const percent = Math.round(fraction * 10_000) / 100;
   const text = new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 1,
+    maximumFractionDigits: 2,
     minimumFractionDigits: 0,
-  }).format(minutes);
-  return `${text} min`;
+  }).format(percent);
+  return `${text}%`;
+}
+
+export function formatTarget(fraction: number): string {
+  return formatPercent(fraction);
+}
+
+export function statusLabel(status: "meeting" | "at_risk" | "breaching"): string {
+  if (status === "at_risk") {
+    return "At risk";
+  }
+  if (status === "breaching") {
+    return "Breaching";
+  }
+  return "Meeting";
+}
+
+/**
+ * Sentence built from the rule and the inputs on `reason`.
+ * Components render this string; they do not compose status prose themselves.
+ */
+export function statusExplanation(reason: StatusReason): string {
+  const used = formatMinutes(reason.usedMinutes);
+  const allowed = formatMinutes(reason.allowedMinutes);
+  if (reason.rule === "breaching") {
+    return `Downtime has used ${used} of the ${allowed} allowance for this window.`;
+  }
+  const consumed =
+    reason.consumedFraction === null ? "an undefined share" : formatPercent(reason.consumedFraction);
+  const projected = formatMinutes(reason.projectedMinutes);
+  if (reason.rule === "trend" && reason.fired.includes("level")) {
+    return `Most of the allowance is already used (${consumed}), and the current pace would exhaust it before the window closes. Projected downtime is ${projected}.`;
+  }
+  if (reason.rule === "trend") {
+    return `At the current pace, downtime will exhaust the allowance before the window closes. Projected downtime is ${projected} against ${allowed} allowed.`;
+  }
+  if (reason.rule === "level") {
+    return `Most of the downtime allowance is already used (${consumed} of ${allowed}).`;
+  }
+  return `Downtime is within the allowance at this point in the window. ${used} of ${allowed} used.`;
+}
+
+export function penaltyText(figure: PenaltyFigure): string {
+  if (figure.kind === "none" || figure.kind === "unknown") {
+    return figure.statement;
+  }
+  const percent = formatPercent(figure.creditFraction);
+  if (figure.amount === null) {
+    return percent;
+  }
+  const amount = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  }).format(figure.amount.amount);
+  return `${percent} · ${amount} ${figure.amount.currency}`;
+}
+
+export function tierDistanceText(usedMinutes: number, startsAfterMinutes: number): string {
+  const used = formatMinuteValue(usedMinutes);
+  const next = formatMinuteValue(startsAfterMinutes);
+  return `${used} of ${next} min used; the next tier starts after ${next} min`;
+}
+
+/** Null when the scored window opens on the first UTC midnight of the month. */
+export function proratedWindowNote(windowStartIso: string): string | null {
+  const date = new Date(windowStartIso);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const midnight =
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0;
+  if (date.getUTCDate() === 1 && midnight) {
+    return null;
+  }
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `Starts ${year}-${month}-${day}. Allowance is prorated to this shorter window.`;
 }
 
 export function comparisonText(comparison: BaselineComparison): string {

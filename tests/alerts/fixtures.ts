@@ -30,6 +30,11 @@ export function scoredRow(
     burnRate: 2,
     status,
     projectedExhaustion: null,
+    windowStart: "2026-09-01T00:00:00.000Z",
+    nextTierStartsAfterMinutes: null,
+    sourceClause: "Schedule A",
+    services: ["payments"],
+    includesScopedServices: null,
     penalty: {
       incurred: { kind: "credit", creditFraction: 0.1, amount: null },
       projected: { kind: "credit", creditFraction: 0.25, amount: null },

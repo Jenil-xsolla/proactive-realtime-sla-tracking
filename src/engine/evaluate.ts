@@ -15,6 +15,7 @@ import {
   allowanceMinutes,
   capAt,
   penaltyFor,
+  nextTierStartsAfterMinutes,
   rawCredit,
   scaleRawPenalties,
   sharedAggregateCap,
@@ -76,6 +77,14 @@ export function evaluate<P extends string, S extends string>(input: {
     results.push(
       ...scoredRows(partnerId, active, partnerOutages, input.window, input.asOf),
     );
+    results.push(
+      ...trackingRows(
+        partnerId,
+        outagesOutsideScopes(partnerOutages, active),
+        input.window,
+        observed,
+      ),
+    );
   }
   return results;
 }
@@ -130,14 +139,7 @@ function scoredRows<P extends string, S extends string>(
     }
   }
 
-  const scopedServices = new Set<S>();
-  for (const scope of scopes) {
-    if (scope.kind === "service") {
-      for (const service of scope.services) {
-        scopedServices.add(service);
-      }
-    }
-  }
+  const scopedServices = scopedServiceIds(scopes);
 
   const drafts = scopes.map((scope) => {
     const startMs = evaluationStartMs(window, scope.terms);
@@ -162,6 +164,7 @@ function scoredRows<P extends string, S extends string>(
       anchorMs: Math.min(asOf.getTime(), scopeWindow.end.getTime()),
       incurred: scopePenalty(counted.usedMinutes, scopeMinutes, scope.terms),
       projected: scopePenalty(projectedMinutes, scopeMinutes, scope.terms),
+      windowStart: scopeWindow.start,
     };
   });
 
@@ -195,6 +198,15 @@ function scoredRows<P extends string, S extends string>(
       burnRate: classification.reason.burnRate,
       status: classification.status,
       projectedExhaustion: classification.projectedExhaustion,
+      windowStart: draft.windowStart,
+      nextTierStartsAfterMinutes:
+        draft.scope.terms.penaltyKind === "tiers"
+          ? nextTierStartsAfterMinutes(
+              draft.usedMinutes,
+              draft.windowMinutes,
+              draft.scope.terms.penaltyTiers,
+            )
+          : null,
       penalty: {
         incurred: penaltyFor(incurred[index] ?? 0, draft.scope.terms.monthlyFee),
         projected: penaltyFor(projected[index] ?? 0, draft.scope.terms.monthlyFee),
@@ -213,6 +225,26 @@ function scopePenalty(minutes: number, windowMinutes: number, terms: EngineTerms
     return "unknown";
   }
   return capAt(rawCredit(minutes, windowMinutes, terms.penaltyTiers), terms.perScopeCap);
+}
+
+function scopedServiceIds<S extends string>(scopes: readonly SlaScope<S>[]): Set<S> {
+  const ids = new Set<S>();
+  for (const scope of scopes) {
+    if (scope.kind === "service") {
+      for (const service of scope.services) {
+        ids.add(service);
+      }
+    }
+  }
+  return ids;
+}
+
+function outagesOutsideScopes<P extends string, S extends string>(
+  outages: readonly UsableOutage<P, S>[],
+  scopes: readonly SlaScope<S>[],
+): UsableOutage<P, S>[] {
+  const scopedServices = scopedServiceIds(scopes);
+  return outages.filter((row) => !scopes.some((scope) => matchesScope(row, scope, scopedServices)));
 }
 
 function matchesScope<P extends string, S extends string>(

@@ -401,7 +401,7 @@ function parseArgs(argv: readonly string[]): { partner?: string; out: string } {
   return { partner, out };
 }
 
-async function scopesSeenInReplay(
+export async function scopesSeenInReplay(
   terms: { listScopes(partner: PartnerId, asOf: Date): Promise<SlaScope[]> },
   through: Date,
   partner: string | undefined,

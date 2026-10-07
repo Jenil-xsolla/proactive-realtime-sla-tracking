@@ -67,7 +67,7 @@ export function TechnicalDashboard({ model }: { model: DashboardModel }) {
               {model.message}
             </p>
           ) : null}
-          <PartnerTable partners={model.partners} />
+          <PartnerTable partners={model.partners} windowKey={model.windowKey} />
         </section>
       )}
     </div>

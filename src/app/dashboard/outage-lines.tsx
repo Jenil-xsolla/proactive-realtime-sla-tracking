@@ -2,7 +2,13 @@ import type { ReactNode } from "react";
 import { reconciliationText } from "./copy";
 import type { OutageView } from "./model";
 
-export function OutageLines({ outages }: { outages: readonly OutageView[] }) {
+export function OutageLines({
+  outages,
+  serviceCaption = "Service",
+}: {
+  outages: readonly OutageView[];
+  serviceCaption?: string;
+}) {
   const groups = groupOutages(outages);
   return (
     <div className="flex flex-col gap-3">
@@ -16,7 +22,7 @@ export function OutageLines({ outages }: { outages: readonly OutageView[] }) {
                   key={`${outage.mergeGroup}:${outage.pirKey}:${outage.started}`}
                   className="border-b border-border p-3 last:border-b-0"
                 >
-                  <OutageRecord outage={outage} />
+                  <OutageRecord outage={outage} serviceCaption={serviceCaption} />
                 </li>
               ))}
             </ul>
@@ -33,7 +39,7 @@ export function OutageLines({ outages }: { outages: readonly OutageView[] }) {
   );
 }
 
-function OutageRecord({ outage }: { outage: OutageView }) {
+function OutageRecord({ outage, serviceCaption }: { outage: OutageView; serviceCaption: string }) {
   return (
     <article className="flex flex-col gap-3">
       <PirKey outage={outage} />
@@ -50,7 +56,7 @@ function OutageRecord({ outage }: { outage: OutageView }) {
         <Field label="Minutes" mono>
           {outage.minutesLabel}
         </Field>
-        <Field label="Service">{outage.service}</Field>
+        <Field label={serviceCaption}>{outage.service}</Field>
         <Field label="Severity">{outage.severity}</Field>
         {outage.merchantId !== null ? (
           <Field label="Merchant id" mono>

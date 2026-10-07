@@ -8,6 +8,7 @@ import type { ServiceEntry } from "./types";
  * `aris` are the bare lowercase Jira ARI UUIDs (customfield_10399) for the
  * service. One UUID maps to exactly one service.
  */
+
 export const SERVICES = [
   { id: "80lv", displayName: "80lv", aliases: [], aris: ["33eed602-87e4-11ec-897c-128b42819424"] },
   { id: "afs", displayName: "AFS", aliases: [], aris: ["a44d02ba-865e-11ed-8d10-128b42819424"] },
@@ -185,3 +186,23 @@ export const SERVICES = [
 ] as const satisfies readonly ServiceEntry[];
 
 export type ServiceId = (typeof SERVICES)[number]["id"];
+
+/**
+ * Services a contract named, omitting children that are present only because
+ * a named service includes them. Matching still uses the expanded set.
+ */
+export function contractedServiceIds(ids: readonly string[]): string[] {
+  const catalog: readonly ServiceEntry[] = SERVICES;
+  const present = new Set(ids);
+  const included = new Set<string>();
+  for (const id of ids) {
+    const entry = catalog.find((service) => service.id === id);
+    for (const child of entry?.includes ?? []) {
+      if (present.has(child)) {
+        included.add(child);
+      }
+    }
+  }
+  const named = ids.filter((id) => !included.has(id));
+  return named.length > 0 ? named : [...ids];
+}

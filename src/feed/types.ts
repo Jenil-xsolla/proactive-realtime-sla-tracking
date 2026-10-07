@@ -93,6 +93,16 @@ export type TechnicalRow =
       burnRate: number;
       status: "meeting" | "at_risk" | "breaching";
       projectedExhaustion: string | null;
+      /** ISO-8601 start of the scored window. Later than the calendar month when prorated. */
+      windowStart: string;
+      /** Null when the penalty is not tiered, or no later tier remains. */
+      nextTierStartsAfterMinutes: number | null;
+      /** Empty when the contract file omitted it. */
+      sourceClause: string;
+      /** Registry service ids this scope names. Empty for a catch-all. */
+      services: readonly string[];
+      /** Null on a service scope. */
+      includesScopedServices: boolean | null;
       penalty: { incurred: PenaltyFigure; projected: PenaltyFigure };
       reason: StatusReason;
       outages: TechnicalOutage[];

@@ -1,5 +1,5 @@
 import type { BaselineComparison, Evaluation, PartnerScopes, PenaltyFigure, StatusReason } from "@/engine";
-import { PARTNERS, SERVICES } from "@/registry";
+import { contractedServiceIds, PARTNERS, SERVICES } from "@/registry";
 import type { BusinessCredit, BusinessRow } from "./types";
 
 export function toBusinessView(
@@ -98,10 +98,10 @@ function scopeLabel(scopes: readonly PartnerScopes[], partner: string, scopeId: 
     return scopeId;
   }
   if (scope.kind === "service") {
-    return scope.services.map((id) => serviceName(id)).join(", ");
+    return contractedServiceIds(scope.services).map((id) => serviceName(id)).join(", ");
   }
   if (scope.includesScopedServices) {
     return "All services";
   }
-  return "Services without a specific scope";
+  return "General Scope";
 }

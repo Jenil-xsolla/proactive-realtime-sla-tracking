@@ -1,10 +1,11 @@
 import type { UsableOutage } from "@/data";
-import type { Evaluation, OutageRef } from "@/engine";
+import type { Evaluation, OutageRef, PartnerScopes, SlaScope } from "@/engine";
 import type { TechnicalOutage, TechnicalRow } from "./types";
 
 export function toTechnicalView(
   evaluations: readonly Evaluation[],
   outages: readonly UsableOutage[],
+  scopes: readonly PartnerScopes[] = [],
 ): TechnicalRow[] {
   const byPartnerAndKey = new Map<string, UsableOutage>();
   for (const outage of outages) {
@@ -26,6 +27,7 @@ export function toTechnicalView(
         outages: rows,
       };
     }
+    const scope = findScope(scopes, evaluation.partner, evaluation.scopeId);
     return {
       kind: "scored",
       partner: evaluation.partner,
@@ -40,11 +42,34 @@ export function toTechnicalView(
         evaluation.projectedExhaustion === null
           ? null
           : evaluation.projectedExhaustion.toISOString(),
+      windowStart: evaluation.windowStart.toISOString(),
+      nextTierStartsAfterMinutes: evaluation.nextTierStartsAfterMinutes,
+      sourceClause: sourceClauseOf(scope),
+      services: scope?.kind === "service" ? scope.services : [],
+      includesScopedServices: scope?.kind === "catch_all" ? scope.includesScopedServices : null,
       penalty: evaluation.penalty,
       reason: evaluation.reason,
       outages: rows,
     };
   });
+}
+
+function findScope(
+  scopes: readonly PartnerScopes[],
+  partner: string,
+  scopeId: string,
+): SlaScope | undefined {
+  return scopes
+    .find((entry) => entry.partner === partner)
+    ?.scopes.find((scope) => scope.scopeId === scopeId);
+}
+
+function sourceClauseOf(scope: SlaScope | undefined): string {
+  if (scope === undefined) {
+    return "";
+  }
+  const clause = (scope.terms as { sourceClause?: unknown }).sourceClause;
+  return typeof clause === "string" ? clause.trim() : "";
 }
 
 function technicalOutage(

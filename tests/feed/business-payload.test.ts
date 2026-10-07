@@ -63,6 +63,9 @@ describe("business feed payload", () => {
 
     expect(technical).toContain(PIR_KEY);
     expect(technical).toContain(INGESTION_PIR_KEY);
+    expect(technical).toContain("FIXTURE — not a contract clause");
+    expect(technical).toContain('"windowStart"');
+    expect(business).not.toContain("FIXTURE — not a contract clause");
     expect(business).toContain('"kind":"scored"');
     expect(business).not.toContain(PIR_KEY);
     expect(business).not.toContain("151639");

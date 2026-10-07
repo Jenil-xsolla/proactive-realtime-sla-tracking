@@ -1,11 +1,15 @@
 import { Caret } from "@/ui";
 import { OutageLines } from "./outage-lines";
 import type { ScopeView } from "./model";
+import { ScoredScopeRow } from "./scored-row";
 
 export const downtimeRowClass =
   "grid grid-cols-[3.25rem_minmax(0,1.4fr)_8.5rem_5.5rem_minmax(0,2fr)] items-start";
 
 export function ScopeRow({ partnerName, row }: { partnerName: string; row: ScopeView }) {
+  if (row.score !== null) {
+    return <ScoredScopeRow partnerName={partnerName} row={{ ...row, score: row.score }} />;
+  }
   const emphasis = row.tone === "unavailable" ? "text-danger" : "text-foreground";
   if (row.outages.length === 0) {
     return (

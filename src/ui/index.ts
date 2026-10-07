@@ -1,3 +1,4 @@
+export { BudgetBar } from "./budget-bar";
 export { Button } from "./button";
 export { Field, TextArea, TextInput } from "./text-input";
 export { Card } from "./card";

@@ -180,6 +180,13 @@ export type Evaluation<P extends string = string, S extends string = string> =
       burnRate: number;
       status: "meeting" | "at_risk" | "breaching";
       projectedExhaustion: Date | null;
+      /** First instant this scope is scored in the requested window. */
+      windowStart: Date;
+      /**
+       * Downtime minutes after which the next credit tier applies.
+       * Null when the penalty is not tiered, or the scope is already in the last tier.
+       */
+      nextTierStartsAfterMinutes: number | null;
       penalty: { incurred: PenaltyFigure; projected: PenaltyFigure };
       reason: StatusReason;
       outages: OutageRef<S>[];

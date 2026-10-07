@@ -498,6 +498,70 @@ describe("evaluate", () => {
     expect(scored.kind).toBe("scored");
   });
 
+  it("reports an outage outside the contracted services as tracking-only", () => {
+    const april = monthWindow(2026, 3);
+    const results = evaluate({
+      outages: [
+        outage({
+          pirKey: "PIR-PAY",
+          serviceId: "payments",
+          incidentStarted: new Date(Date.UTC(2026, 3, 10, 0, 0)),
+          outageMinutes: 10,
+        }),
+        outage({
+          pirKey: "POSTMORTEM-466",
+          serviceId: "igs-bb",
+          incidentStarted: new Date(Date.UTC(2026, 3, 16, 16, 46)),
+          outageMinutes: 6,
+        }),
+      ],
+      scopes: [partner([serviceScope("pay-station", "payments")])],
+      window: april,
+      asOf: atEnd(april),
+    });
+
+    const scored = expectScored(results, "pay-station");
+    expect(scored.usedMinutes).toBe(10);
+    expect(scored.outages.map((row) => row.pirKey)).toEqual(["PIR-PAY"]);
+
+    const tracking = results.filter((result) => result.kind === "tracking_only");
+    expect(tracking).toHaveLength(1);
+    const uncovered = tracking[0];
+    if (uncovered === undefined || uncovered.kind !== "tracking_only") {
+      throw new Error("missing uncovered tracking row");
+    }
+    expect(uncovered.service).toBe("igs-bb");
+    expect(uncovered.usedMinutes).toBe(6);
+    expect(uncovered.outages.map((row) => row.pirKey)).toEqual(["POSTMORTEM-466"]);
+    expect(Object.hasOwn(uncovered, "status")).toBe(false);
+  });
+
+  it("does not track a service the catch-all already covers", () => {
+    const april = monthWindow(2026, 3);
+    const results = evaluate({
+      outages: [
+        outage({
+          pirKey: "POSTMORTEM-466",
+          serviceId: "igs-bb",
+          incidentStarted: new Date(Date.UTC(2026, 3, 16, 16, 46)),
+          outageMinutes: 6,
+        }),
+      ],
+      scopes: [
+        partner([
+          serviceScope("pay-station", "payments"),
+          catchAll("general", false),
+        ]),
+      ],
+      window: april,
+      asOf: atEnd(april),
+    });
+
+    expect(results.some((result) => result.kind === "tracking_only")).toBe(false);
+    expect(expectScored(results, "general").usedMinutes).toBe(6);
+    expect(expectScored(results, "pay-station").usedMinutes).toBe(0);
+  });
+
   it("omits status on a tracking-only result", () => {
     const january = monthWindow(2026, 0);
     const results = evaluate({
@@ -1104,8 +1168,158 @@ describe("evaluate", () => {
     });
     expect(unknown.penalty.projected).toEqual(unknown.penalty.incurred);
     expect(JSON.stringify(unknown.penalty)).not.toContain('"creditFraction":0');
+    expect(unknown.nextTierStartsAfterMinutes).toBeNull();
     expect(none.penalty.incurred).toEqual({ kind: "none", statement: "no penalty clause" });
     expect(none.penalty.projected).toEqual(none.penalty.incurred);
+    expect(none.nextTierStartsAfterMinutes).toBeNull();
+  });
+
+  it("puts the next tier on the same threshold as the credit, including a prorated window", () => {
+    const june = monthWindow(2026, 5);
+    const cliff = expectScored(
+      evaluate({
+        outages: [
+          outage({
+            pirKey: "PIR-CLIFF",
+            incidentStarted: new Date(Date.UTC(2026, 5, 10)),
+            outageMinutes: 18.4,
+          }),
+        ],
+        scopes: [
+          partner([
+            serviceScope("payments", "payments", {
+              target: 0.9995,
+              penaltyTiers: [
+                { belowAvailability: 0.9995, creditFraction: 0.05 },
+                { belowAvailability: 0.995, creditFraction: 0.1 },
+              ],
+            }),
+          ]),
+        ],
+        window: june,
+        asOf: atEnd(june),
+      }),
+      "payments",
+    );
+    expect(cliff.allowedMinutes).toBe(21.6);
+    expect(cliff.usedMinutes).toBe(18.4);
+    expect(cliff.nextTierStartsAfterMinutes).toBe(21.6);
+    expect(cliff.penalty.incurred).toMatchObject({ kind: "credit", creditFraction: 0 });
+    expect(cliff.windowStart.toISOString()).toBe("2026-06-01T00:00:00.000Z");
+
+    const onTheLine = expectScored(
+      evaluate({
+        outages: [
+          outage({
+            pirKey: "PIR-LINE",
+            incidentStarted: new Date(Date.UTC(2026, 5, 10)),
+            outageMinutes: 21.6,
+          }),
+        ],
+        scopes: [
+          partner([
+            serviceScope("payments", "payments", {
+              target: 0.9995,
+              penaltyTiers: [
+                { belowAvailability: 0.9995, creditFraction: 0.05 },
+                { belowAvailability: 0.995, creditFraction: 0.1 },
+              ],
+            }),
+          ]),
+        ],
+        window: june,
+        asOf: atEnd(june),
+      }),
+      "payments",
+    );
+    expect(onTheLine.nextTierStartsAfterMinutes).toBe(21.6);
+    expect(onTheLine.penalty.incurred).toMatchObject({ kind: "credit", creditFraction: 0 });
+
+    const past = expectScored(
+      evaluate({
+        outages: [
+          outage({
+            pirKey: "PIR-PAST",
+            incidentStarted: new Date(Date.UTC(2026, 5, 10)),
+            outageMinutes: 21.7,
+          }),
+        ],
+        scopes: [
+          partner([
+            serviceScope("payments", "payments", {
+              target: 0.9995,
+              penaltyTiers: [
+                { belowAvailability: 0.9995, creditFraction: 0.05 },
+                { belowAvailability: 0.995, creditFraction: 0.1 },
+              ],
+            }),
+          ]),
+        ],
+        window: june,
+        asOf: atEnd(june),
+      }),
+      "payments",
+    );
+    expect(past.penalty.incurred).toMatchObject({ kind: "credit", creditFraction: 0.05 });
+    expect(past.nextTierStartsAfterMinutes).toBe(216);
+
+    const short = monthWindow(2027, 5);
+    const prorated = expectScored(
+      evaluate({
+        outages: [
+          outage({
+            pirKey: "PIR-SHORT",
+            incidentStarted: new Date(Date.UTC(2027, 5, 20)),
+            outageMinutes: 5,
+          }),
+        ],
+        scopes: [
+          partner([
+            serviceScope("payments", "payments", {
+              target: 0.9995,
+              effectiveFrom: new Date("2027-06-15T00:00:00.000Z"),
+              penaltyTiers: [{ belowAvailability: 0.9995, creditFraction: 0.05 }],
+            }),
+          ]),
+        ],
+        window: short,
+        asOf: atEnd(short),
+      }),
+      "payments",
+    );
+    expect(prorated.windowStart.toISOString()).toBe("2027-06-15T00:00:00.000Z");
+    expect(prorated.allowedMinutes).toBe(11.52);
+    expect(prorated.nextTierStartsAfterMinutes).toBe(11.52);
+  });
+
+  it("can breach the target while the current tier credit is still zero", () => {
+    const june = monthWindow(2026, 5);
+    const row = expectScored(
+      evaluate({
+        outages: [
+          outage({
+            pirKey: "PIR-BREACH",
+            incidentStarted: new Date(Date.UTC(2026, 5, 2)),
+            outageMinutes: 30,
+          }),
+        ],
+        scopes: [
+          partner([
+            serviceScope("payments", "payments", {
+              target: 0.9995,
+              penaltyTiers: [{ belowAvailability: 0.995, creditFraction: 0.1 }],
+            }),
+          ]),
+        ],
+        window: june,
+        asOf: atEnd(june),
+      }),
+      "payments",
+    );
+    expect(row.status).toBe("breaching");
+    expect(row.allowedMinutes).toBe(21.6);
+    expect(row.penalty.incurred).toMatchObject({ kind: "credit", creditFraction: 0 });
+    expect(row.nextTierStartsAfterMinutes).toBe(216);
   });
 
   it("evaluates a pre-2026 contract across all of January 2026", () => {
@@ -1169,6 +1383,7 @@ describe("evaluate", () => {
 
     expect(row.allowedMinutes).toBe(11.52);
     expect(row.usedMinutes).toBe(30);
+    expect(row.windowStart.toISOString()).toBe("2027-06-15T00:00:00.000Z");
   });
 
   it("rejects a scope that is not measured in UTC", () => {
