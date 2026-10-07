@@ -71,4 +71,30 @@ describe("health page", () => {
     expect(html).not.toContain("<table");
     expect(html).toContain("None");
   });
+
+  it("renders each ingestion list with a linked key, a plain key without a URL, and None for an empty list", () => {
+    const health = buildHealth({
+      health: feedHealth(),
+      ingestion: {
+        status: "ok",
+        counts: { failed: 2, unresolved: 1, withoutMessage: 0 },
+        failed: [
+          { pirKey: "GTO-900", pirUrl: "https://jira.example/browse/GTO-900", error: "Jira fetch failed", updatedAt: "2026-09-20T00:00:00.000Z" },
+          { pirKey: "GTO-901", pirUrl: null, error: "Missing incident link", updatedAt: "2026-09-19T00:00:00.000Z" },
+        ],
+        unresolved: [{ pirKey: "GTO-902", pirUrl: "https://jira.example/browse/GTO-902", values: [{ kind: "merchant", raw: "Some Unmatched Studio LLC" }] }],
+        withoutMessage: [],
+      },
+      invalidTerms: [],
+    });
+    const html = renderToStaticMarkup(<HealthPage health={health} unusable={[]} />);
+    expect(html).toContain('href="https://jira.example/browse/GTO-900"');
+    expect(html).toContain("Jira fetch failed");
+    expect(html).toContain(">GTO-901<");
+    expect(html).toContain("Missing incident link");
+    expect(html).not.toMatch(/<a[^>]*>GTO-901<\/a>/);
+    expect(html).toContain(">GTO-902<");
+    expect(html).toContain("Some Unmatched Studio LLC");
+    expect(html).toContain("None");
+  });
 });

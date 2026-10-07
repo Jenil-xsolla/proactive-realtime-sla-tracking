@@ -72,15 +72,15 @@ Dot tone for the selected window:
 
 | Partner state | Dot | Name |
 | --- | --- | --- |
-| Any term breaching | filled, `danger`, plus `!` | foreground |
-| Any term at risk (none breaching) | filled, `warning` | foreground |
-| All terms meeting | hollow, `foreground` border | foreground |
-| No bound terms (tracking only) | filled, `muted-foreground` | muted-foreground |
+| Any term breaching | filled `danger` dot with a visible `!` in `danger` | foreground |
+| Any term at risk (none breaching) | filled `warning` dot with a visible `!` in `warning` | foreground |
+| All terms meeting | hollow dot, `foreground` border | foreground |
+| No bound terms (tracking only) | hollow dot, `muted-foreground` border | muted-foreground |
 | Feed failed | none | muted-foreground |
 
 Active entry: `bg-secondary` with a 2px `primary` left edge. No partner filter input; eleven entries fit.
 
-**NavModel.** Built in `src/app/dashboard/model.ts` from the same `PartnerView[]` the page renders, plus the alert and health counts:
+**NavModel.** Built in `src/app/dashboard/nav.ts` from the same `PartnerView[]` the page renders, plus the alert and health counts:
 
 ```ts
 type NavModel = {
@@ -165,6 +165,8 @@ Tracking-only partner: tiles read `No terms` for the first three and the fourth 
 | Projected | projected exhaustion timestamp, or `None projected` |
 | Credit | as §6 |
 
+**Credit cell.** When incurred and projected are the same non-numeric statement (for example `penalty clause, not yet entered` for both), the cell shows that statement once. Numeric pairs keep `incurred → projected`.
+
 Expanded content is today's `OutageLines`: PIR key linked to `pir_url`, start, computed end, minutes (both durations for a boundary outage), filed service, severity, merchant id, source, review line, merged groups marked, reconciliation line.
 
 Scored partners with outages outside their scopes get a second table, `Outside contracted scopes`, with the tracking columns from below.
@@ -192,7 +194,7 @@ The comparison is descriptive, never evaluative (parent §9.1). The data comes f
 - Status sentence rendered from `StatusReason`, as today.
 - `Tickets`: PIR keys that consumed this term's downtime, newest first, each linked to its stored `pir_url` (https only, as today); a key without a URL is plain mono text. Empty: `No outages in this window.`
 
-**Recorded downtime (tracking only).** For a partner with no bound terms: a line `Tracking only. Minutes are recorded downtime; there is no target or status.`, then a table with columns Service, Minutes this window, Incidents, Window trend, Compared with recent months, expandable to the same outage lines.
+**Recorded downtime (tracking only).** For a partner with no bound terms: a line `Tracking only. Minutes are recorded downtime; there is no target or status.`, then a table with columns Service, Minutes this window, Incidents, Window trend, Compared with recent months, expandable to the same outage lines. A partner with no terms and no recorded rows shows the sentence `No downtime recorded in this window.` instead of a table.
 
 **States.** Feed unavailable: header stays, tiles read `Unavailable`, one error row in the table, no cards. Business role: the variant in §9a. Unknown slug: 404.
 
@@ -251,6 +253,8 @@ The business viewer gets the Overview (§6) and the partner page (§7) rendered 
 
 The business row's `summary` sentence is the status sentence on its cards. The technical page keeps rendering its sentence from `StatusReason` through `copy.ts`, as today.
 
+**Disclosure scope.** The only `<details>` that must never reach a business viewer is the outage disclosure (`data-outages`). The month picker in the top bar is also a `<details>` and is shared by both roles.
+
 **Nothing is hidden by a conditional.** The business `PartnerView` is built from `BusinessRow`, which has no PIR key, URL, merchant id, severity, reviewer, clause, or reason object. A component asked to render tickets receives an empty list and renders nothing; the card's tickets block is omitted when the view carries `tickets: null`. A page-level test asserts the rendered business markup contains none of the sentinel values the payload test already guards (parent §13).
 
 ## 10. Engine addition
@@ -271,7 +275,7 @@ type MonthHistory = { month: string; usedMinutes: number | null }  // "YYYY-MM";
 
 `history` is the six calendar months before the window's month, oldest first, computed with the same `attribute()` and `countDowntime()` the status uses, over the scope's services (scored) or the single service (tracking). The existing `baseline()` is rewritten to derive its median from these totals so the two cannot drift. Covered months with no outages are `0`; months before `DATA_COVERAGE_START` are `null`.
 
-Actual uptime is a display derivation in `copy.ts`: `1 - usedMinutes / elapsedMinutes` while the window is open, `1 - usedMinutes / windowMinutes` once settled. When `elapsedMinutes` is 0 the figure renders as `100.000%`. Formatted to three decimals with `formatTarget`'s precision rules.
+Actual uptime is a display derivation in `copy.ts`: `1 - usedMinutes / elapsedMinutes` while the window is open, `1 - usedMinutes / windowMinutes` once settled. When `elapsedMinutes` is 0 the figure renders as `100.000%`. Formatted to three decimals by `formatUptime`.
 
 The technical serialiser passes the three fields through.
 
@@ -283,24 +287,31 @@ Tests (`tests/engine/evaluate.test.ts`):
 - A tracking row's `history` median equals its `comparison.medianMinutes`.
 - `windowMinutes` on a prorated window equals the shortened length; `elapsedMinutes` is 0 before the window opens and equals `windowMinutes` after it closes.
 
+Scored results also carry `comparison`, from the same `baseline()` as tracking rows, so the trend mark on a scored row uses the one median implementation. Business rows carry `target` and `versusMedian` for the same reason. (Decided during planning, 2026-10-07.)
+
 ## 11. Module layout
 
 ```
 src/app/
-├── shell/            shell.tsx, sidebar.tsx, top-bar.tsx, status-dot.tsx
-├── dashboard/        model.ts (+ nav, overview, partner, alerts, health builders), copy.ts, load.ts,
-│                     outage-lines.tsx, trend-sparkline.tsx, term-table.tsx, coverage-cards.tsx,
-│                     tiles.tsx, backtest-panel.tsx, window-select.tsx, outage-disclosure.ts
+├── shell/            shell.tsx, sidebar.tsx, top-bar.tsx
+├── dashboard/        view.ts (role-neutral view model and both builders), overview.ts, partner-page.ts,
+│                     alerts-view.ts, nav.ts, badges.ts (alertsBadge, healthBadge: pure, re-exported by
+│                     load.ts), load.ts, model.ts (month options, health view, backtest panel, unusable
+│                     rows), outage-view.ts, copy.ts, run-backtest.ts, outage-disclosure.ts,
+│                     overview-page.tsx, partner-page-view.tsx, alerts-page.tsx, health-page.tsx,
+│                     attention-table.tsx, term-table.tsx, tracking-table.tsx, coverage-cards.tsx,
+│                     partner-rail.tsx, trend-sparkline.tsx, outage-lines.tsx, backtest-panel.tsx,
+│                     window-select.tsx
 ├── page.tsx                      overview
 ├── partners/[partner]/page.tsx   partner page
 ├── partners/[partner]/terms/     unchanged, wrapped in Shell
 ├── alerts/page.tsx
 └── health/page.tsx
 src/data/alert-state.ts           listAlertState
-src/ui/                           + tile.tsx, sparkline.tsx (generic bars), status-dot in shell
+src/ui/                           + tile.tsx, sparkline.tsx (generic bars), status-dot.tsx
 ```
 
-`partner-table.tsx`, `scored-row.tsx`, `scope-row.tsx`, `health-panel.tsx`, and `technical-dashboard.tsx` are removed once their behaviour has moved. Boundaries are unchanged: `src/app` imports `feed`, `data` (reads only, as `load.ts` already does), `alerts` types, and `ui`; never `engine`, `registry`, or `terms` directly. Merchant IDs reach the page through a new `partnerMerchantIds(id)` export in `feed/labels.ts`.
+`partner-table.tsx`, `scored-row.tsx`, `scope-row.tsx`, `health-panel.tsx`, and `technical-dashboard.tsx` were removed once their behaviour had moved. Boundaries are unchanged: `src/app` imports `feed`, `data` (reads only, as `load.ts` already does), `alerts` types, and `ui`; never `engine`, `registry`, or `terms` directly. Merchant IDs reach the page through a new `partnerMerchantIds(id)` export in `feed/labels.ts`.
 
 ### 11.1 One view model, two builders
 
@@ -360,12 +371,14 @@ Same style as today: `renderToStaticMarkup`, assertions on text and attributes, 
 
 ## 13. Parent spec amendments
 
-- §1: subsystem 5 (business view) moves from "one-and-a-half" to this slice; it ships with the technical view, on real terms only, as AD-6 already requires.
-- §7.2: add `windowMinutes`, `elapsedMinutes`, `history` to the scored result and `history` to the tracking result.
-- §8.2: `toBusinessView` additionally carries `partnerId` (registry slug), `history`, `windowMinutes`, `elapsedMinutes`. The exclusion list is unchanged.
-- §8.3: add `GET /alerts` and `GET /health` pages (not API routes) to the route table, technical role only.
-- §9.2: replace with a pointer to this document's §4 to §9a.
-- §9.3: amend "The health panel is first-class" to: the dropped-rows count is on every screen in the top bar; the detail lives on `/health`, one click away, with its own sidebar badge.
+Applied to `specs/sla-dashboard-spec.md` with this slice:
+
+- §1: subsystem 5 (business view) moved from "one-and-a-half" to this slice; it ships with the technical view, on real terms only, as AD-6 already requires.
+- §7.2: added `windowMinutes`, `elapsedMinutes`, `history`, and `comparison` to the scored result and `history` to the tracking result, and defined `MonthHistory`.
+- §8.2: `toBusinessView` additionally carries `partnerId` (registry slug), `target`, `windowMinutes`, `elapsedMinutes`, `history`, and `versusMedian`. The exclusion list is unchanged.
+- §8.3: added `GET /alerts` and `GET /health` pages (not API routes) to the route table, technical role only.
+- §9.2: replaced with a pointer to this document's §4 to §9a.
+- §9.3: amended "The health panel is first-class" to: the dropped-rows count is on every screen in the top bar; the detail lives on `/health`, one click away, with its own sidebar badge.
 
 ## 14. Out of scope
 

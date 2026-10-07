@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { OutageLines } from "@/app/dashboard/outage-lines";
 import { TermTable } from "@/app/dashboard/term-table";
 import { OUTAGE_DISCLOSURE_SCRIPT } from "@/app/dashboard/outage-disclosure";
 import { buildTechnicalPartners } from "@/app/dashboard/view";
@@ -76,5 +77,30 @@ describe("term table expander", () => {
     const html = renderToStaticMarkup(<TermTable partnerName="Scopely" terms={termsFor(merged, 40)} />);
     expect(html).toContain("Overlapping minutes were counted once.");
     expect(html).toContain("2 outages · 40 minutes counted in this window");
+  });
+
+  it("renders the PIR key as a link only for an https ticket URL, and the severity without an em dash", () => {
+    const linked = termsFor([boundaryOutage], 30)[0]?.outages ?? [];
+    expect(linked[0]?.severity).toBe("L1 · Critical");
+    const linkedHtml = renderToStaticMarkup(<OutageLines outages={linked} />);
+    expect(linkedHtml).toContain('href="https://jira.example/browse/GTO-543"');
+    expect(linkedHtml).toContain('rel="noopener noreferrer"');
+    expect(linkedHtml).toContain("L1 · Critical");
+    expect(linkedHtml).not.toContain("—");
+    expect(linkedHtml).toContain("Merchant id");
+    expect(linkedHtml).toContain("151639");
+    expect(linkedHtml).toContain("ai_approved · jenil_patel · 2026-09-22 21:34:00 UTC");
+    expect(linkedHtml).not.toContain("Source");
+
+    const plain = termsFor([{ ...boundaryOutage, pirKey: "GTO-100", pirUrl: null, source: "pipeline" }], 30)[0]?.outages ?? [];
+    const plainHtml = renderToStaticMarkup(<OutageLines outages={plain} />);
+    expect(plainHtml).toContain("GTO-100");
+    expect(plainHtml).toContain("no ticket link");
+    expect(plainHtml).not.toContain("<a ");
+    expect(plainHtml).toContain("Source");
+    expect(plainHtml).toContain("pipeline");
+
+    const insecure = termsFor([{ ...boundaryOutage, pirKey: "GTO-101", pirUrl: "http://jira.example/browse/GTO-101" }], 30)[0]?.outages ?? [];
+    expect(insecure[0]?.href).toBeNull();
   });
 });

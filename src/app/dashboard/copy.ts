@@ -35,14 +35,6 @@ export const CLAUSE_NOT_RECORDED = "Clause not recorded";
 
 export const FILED_AGAINST = "Filed against";
 
-export const SLA_SECTION = "SLA";
-
-export const TRACKING_ONLY_SECTION = "Tracking only";
-
-export function affectedServicesLine(services: readonly string[]): string {
-  return `Affected: ${services.join(", ")}`;
-}
-
 export const EXHAUSTION_NONE = "None projected";
 
 export const ADD_CONTRACT_TERMS = "Add contract terms";
@@ -60,9 +52,6 @@ export const UNAVAILABLE = "Unavailable";
 
 export const VIEWER_UNCONFIGURED =
   "Viewer role is not configured. No downtime figures were loaded.";
-
-export const BUSINESS_VIEWER =
-  "This screen is the engineer view. The current viewer is the business role, so ticket keys and review detail are not in this payload. No downtime figures are shown.";
 
 export const HEALTH_UNAVAILABLE =
   "Outage records could not be loaded. Dropped rows, unresolved partner names, and unmatched service names are unavailable. This is not a clean extract.";
@@ -164,10 +153,6 @@ export function formatPercent(fraction: number): string {
     minimumFractionDigits: 0,
   }).format(percent);
   return `${text}%`;
-}
-
-export function formatTarget(fraction: number): string {
-  return formatPercent(fraction);
 }
 
 export function statusLabel(status: "meeting" | "at_risk" | "breaching"): string {
@@ -373,7 +358,6 @@ export function reasonLabel(reason: string): string {
   return REASON_LABELS.find(([key]) => key === reason)?.[1] ?? reason;
 }
 
-export const NO_SERVICE = "No service";
 export const NO_TERMS = "No terms";
 export const TO_DATE = "to date";
 export const TRACKING_ONLY_LABEL = "Tracking only";

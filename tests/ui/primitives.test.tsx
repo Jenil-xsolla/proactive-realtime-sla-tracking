@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { Sparkline, StatusDot, Tile } from "@/ui";
+import { Sparkline, StatusBadge, StatusDot, Tile } from "@/ui";
 
 describe("ui primitives", () => {
   it("renders a tile with label, value, and detail in token classes", () => {
@@ -67,5 +67,10 @@ describe("ui primitives", () => {
     expect(html).not.toContain("text-warning");
     expect(html).not.toContain("text-danger");
     expect(html).not.toMatch(/>!</);
+  });
+
+  it("prints a text label on warning and danger badges", () => {
+    expect(renderToStaticMarkup(<StatusBadge variant="warning" label="At risk" />)).toContain("At risk");
+    expect(renderToStaticMarkup(<StatusBadge variant="danger" label="Breaching" />)).toContain("Breaching");
   });
 });

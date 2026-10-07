@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { UNUSABLE_REASONS } from "@/data";
 import {
@@ -210,6 +212,36 @@ describe("dashboard copy", () => {
       if (typeof value === "string") {
         expect(value, name).not.toContain("—");
       }
+    }
+  });
+
+  it("keeps status sentences out of components", () => {
+    const dirs = ["src/app/dashboard", "src/app/shell"];
+    const files = [
+      ...dirs.flatMap((dir) =>
+        readdirSync(path.join(process.cwd(), dir))
+          .filter((name) => name.endsWith(".tsx"))
+          .map((name) => path.join(dir, name)),
+      ),
+      "src/ui/budget-bar.tsx",
+      "src/ui/status-badge.tsx",
+    ];
+    expect(files.length).toBeGreaterThan(10);
+    const source = files.map((file) => readFileSync(path.join(process.cwd(), file), "utf8")).join("\n");
+    for (const sentence of [
+      "Downtime is within",
+      "Downtime has used",
+      "current pace",
+      "Most of the allowance",
+      "Most of the downtime",
+      "within the allowance",
+      "the next tier starts after",
+      "no penalty clause",
+      "not yet entered",
+      "Clause reference not yet recorded",
+      "prorated",
+    ]) {
+      expect(source, sentence).not.toContain(sentence);
     }
   });
 });

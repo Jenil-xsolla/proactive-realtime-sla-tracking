@@ -31,7 +31,7 @@ export function toOutageViews(outages: readonly TechnicalOutage[]): OutageView[]
       ended: computedEnd(outage.incidentStarted, outage.totalMinutes),
       minutesLabel: windowMinutesLabel(outage.totalMinutes, outage.minutesInWindow),
       service: serviceLabel(outage.service),
-      severity: severityLabel(outage.severity),
+      severity: severityLabel(outage.severity).replace(" — ", " · "),
       review: reviewLine(outage),
       merchantId: outage.partnerId === null ? null : String(outage.partnerId),
       source: outage.source,

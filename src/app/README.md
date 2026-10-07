@@ -1,1 +1,1 @@
-Routes and pages. May import feed, alerts, ui, and `@/ingestion` (its public entry point only — never `@/ingestion/writer` or `@/ingestion/db` directly); must not import engine, data, registry, or terms.
+Routes and pages. May import feed, alerts, ui, and `@/ingestion` (its public entry point only — never `@/ingestion/writer` or `@/ingestion/db` directly); must not import engine, data, registry, or terms. `shell/` is the sidebar and top bar around every page; `dashboard/view.ts` is the role-neutral view model both roles render.

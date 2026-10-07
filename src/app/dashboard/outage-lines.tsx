@@ -57,7 +57,7 @@ function OutageRecord({ outage, serviceCaption }: { outage: OutageView; serviceC
           {outage.minutesLabel}
         </Field>
         <Field label={serviceCaption}>{outage.service}</Field>
-        <Field label="Severity">{outage.severity.replace(" — ", " · ")}</Field>
+        <Field label="Severity">{outage.severity}</Field>
         {outage.merchantId !== null ? (
           <Field label="Merchant id" mono>
             {outage.merchantId}

@@ -171,4 +171,14 @@ describe("view model", () => {
       expect(partner).toMatchObject({ unavailable: true, merchantIds: null, contractTerms: null, terms: [], tracking: [], backtestEnabled: false });
     }
   });
+
+  it("links a PIR key only when the stored ticket URL is https", () => {
+    const outage = (pirKey: string, pirUrl: string | null) => ({ ...scoredRow().outages[0]!, pirKey, pirUrl });
+    const [partner] = buildTechnicalPartners(
+      [scoredRow({ outages: [outage("GTO-1", "https://jira.example/browse/GTO-1"), outage("GTO-2", "http://jira.example/browse/GTO-2"), outage("GTO-3", null)] })],
+      "open", "2026-09", null,
+    );
+    const hrefs = Object.fromEntries((partner?.terms[0]?.tickets ?? []).map((ticket) => [ticket.key, ticket.href]));
+    expect(hrefs).toEqual({ "GTO-1": "https://jira.example/browse/GTO-1", "GTO-2": null, "GTO-3": null });
+  });
 });

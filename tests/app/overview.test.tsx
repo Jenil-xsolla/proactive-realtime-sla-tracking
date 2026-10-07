@@ -65,4 +65,34 @@ describe("overview", () => {
     expect(html).not.toContain("flagged");
     expect(html).not.toContain(">0<");
   });
+
+  it("keeps incurred and projected credit apart, and never prints 0% for an unentered clause", () => {
+    const numeric = buildOverview({
+      partners: partnersWith([
+        scoredRow({
+          status: "at_risk",
+          penalty: {
+            incurred: { kind: "credit", creditFraction: 0.1, amount: { amount: 1000, currency: "XXX" } },
+            projected: { kind: "credit", creditFraction: 0.25, amount: { amount: 2500, currency: "XXX" } },
+          },
+        }),
+      ]),
+      phase: "open", windowKey: "2026-09", failure: null, role: "technical",
+    });
+    const numericHtml = renderToStaticMarkup(<OverviewPage view={numeric} />);
+    expect(numericHtml).toContain("10% · 1,000 XXX → 25% · 2,500 XXX");
+    expect(numericHtml).not.toContain("35%");
+    expect(numericHtml).not.toContain("3,500");
+
+    const unknown = { kind: "unknown", statement: "penalty clause, not yet entered" } as const;
+    const entered = buildOverview({
+      partners: partnersWith([scoredRow({ status: "at_risk", penalty: { incurred: unknown, projected: unknown } })]),
+      phase: "open", windowKey: "2026-09", failure: null, role: "technical",
+    });
+    expect(entered.attention[0]?.term.credit.text).toBe("penalty clause, not yet entered");
+    const enteredHtml = renderToStaticMarkup(<OverviewPage view={entered} />);
+    expect(enteredHtml).toContain("penalty clause, not yet entered");
+    expect(enteredHtml).not.toContain("→");
+    expect(enteredHtml).not.toMatch(/>0%</);
+  });
 });
