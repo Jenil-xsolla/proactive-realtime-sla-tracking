@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, PUT } from "@/app/api/sla/contract-terms/[partner]/route";
 import { ADD_CONTRACT_TERMS, VIEW_TERMS } from "@/app/dashboard/copy";
 import { buildPartnerGroups } from "@/app/dashboard/model";
@@ -120,7 +120,18 @@ function ingestion(): IngestionHealth {
 describe("contract terms routes and technical view", () => {
   let testDb: TestDatabase | undefined;
 
+  const originalRole = process.env.VIEWER_ROLE;
+
+  beforeEach(() => {
+    process.env.VIEWER_ROLE = "technical";
+  });
+
   afterEach(async () => {
+    if (originalRole === undefined) {
+      delete process.env.VIEWER_ROLE;
+    } else {
+      process.env.VIEWER_ROLE = originalRole;
+    }
     dbBox.current = undefined;
     await testDb?.close();
     testDb = undefined;
@@ -169,6 +180,10 @@ describe("contract terms routes and technical view", () => {
         searchParams: Promise.resolve({}),
       }),
     );
+    expect(view).toMatch(/<a href="\/\?window=[^"]+"[^>]*>Overview<\/a>/);
+    expect(view).toMatch(/<a href="\/partners\/roblox\?window=[^"]+"[^>]*>Roblox<\/a>/);
+    expect(view).toContain('<span class="text-foreground">Contract terms</span>');
+    expect(view).not.toContain(">Downtime<");
     expect(view).toContain("FIXTURE clause alpha");
     expect(view).toContain("97.25%");
     expect(view).toContain("Draft. These terms are not scoring.");
@@ -273,6 +288,17 @@ describe("contract terms routes and technical view", () => {
       }),
     ]);
     expect(await readContractTerms(database.db)).toEqual([]);
+  });
+
+  it("returns not found for the business role", async () => {
+    await openDb();
+    process.env.VIEWER_ROLE = "business";
+    await expect(
+      PartnerTermsPage({
+        params: Promise.resolve({ partner: "roblox" }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
   it("renders an empty add form with no contract figures", async () => {

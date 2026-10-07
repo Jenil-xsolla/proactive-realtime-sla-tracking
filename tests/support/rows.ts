@@ -89,3 +89,17 @@ export function trackingRow(overrides: Partial<Extract<TechnicalRow, { kind: "tr
     ...overrides,
   };
 }
+
+export function businessTrackingRow(): BusinessRow {
+  return {
+    kind: "tracking_only",
+    partner: "Scopely",
+    partnerId: "scopely",
+    service: "Login",
+    usedMinutes: 9,
+    incidentCount: 1,
+    comparison: "Not enough history to compare yet.",
+    history,
+    versusMedian: null,
+  };
+}
