@@ -1,23 +1,39 @@
 import { unstable_noStore as noStore } from "next/cache";
-import { loadDashboard } from "./dashboard/load";
-import { TechnicalDashboard } from "./dashboard/technical-dashboard";
+import { alertsBadge, healthBadge, loadWorkspace } from "./dashboard/load";
+import { buildNav } from "./dashboard/nav";
+import { buildOverview } from "./dashboard/overview";
+import { OverviewPage } from "./dashboard/overview-page";
+import { Shell } from "./shell/shell";
 
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ window?: string | string[]; backtest?: string | string[] }>;
-}) {
+function single(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function HomePage({ searchParams }: { searchParams: Promise<{ window?: string | string[] }> }) {
   noStore();
   const params = await searchParams;
-  const requested = Array.isArray(params.window) ? undefined : params.window;
-  const backtest = Array.isArray(params.backtest) ? params.backtest[0] : params.backtest;
-  const model = await loadDashboard(requested, backtest);
+  const workspace = await loadWorkspace({ window: single(params.window) });
+  const nav = buildNav({
+    windowKey: workspace.frame.windowKey,
+    role: workspace.role,
+    partners: workspace.partners,
+    alerts: alertsBadge(workspace.alerts, workspace.frame.windowKey),
+    health: healthBadge(workspace.health),
+    active: { kind: "overview" },
+  });
+  const view = buildOverview({
+    partners: workspace.partners,
+    phase: workspace.frame.phase,
+    windowKey: workspace.frame.windowKey,
+    failure: workspace.failure,
+    role: workspace.role,
+  });
   return (
-    <main className="mx-auto flex w-full min-w-0 max-w-6xl flex-col p-6">
-      <TechnicalDashboard model={model} />
-    </main>
+    <Shell nav={nav} frame={{ ...workspace.frame, chip: workspace.chip }} breadcrumb={[{ label: "Overview" }]}>
+      <OverviewPage view={view} />
+    </Shell>
   );
 }

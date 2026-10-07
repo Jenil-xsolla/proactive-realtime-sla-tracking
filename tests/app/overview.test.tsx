@@ -1,0 +1,68 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { NO_ATTENTION, QUERY_FAILED, SETTLED_NOTE } from "@/app/dashboard/copy";
+import { buildOverview } from "@/app/dashboard/overview";
+import { OverviewPage } from "@/app/dashboard/overview-page";
+import { buildTechnicalPartners, unavailablePartners } from "@/app/dashboard/view";
+import type { TechnicalRow } from "@/feed";
+import { scoredRow } from "../support/rows";
+
+function partnersWith(rows: TechnicalRow[]) {
+  return buildTechnicalPartners(rows, "open", "2026-09", { withTerms: new Set(["scopely", "niantic"]), bound: new Set(["scopely", "niantic"]), draft: new Set() });
+}
+
+describe("overview", () => {
+  it("counts terms by status, lists at-risk and breaching terms breaching first, and sorts the rail worst first", () => {
+    const view = buildOverview({
+      partners: partnersWith([
+        scoredRow({ partner: "niantic", scopeId: "payments", status: "at_risk", usedMinutes: 18, penalty: { incurred: { kind: "none", statement: "no penalty clause" }, projected: { kind: "unknown", statement: "penalty clause, not yet entered" } } }),
+        scoredRow({ partner: "scopely", scopeId: "payments", status: "breaching", usedMinutes: 76 }),
+        scoredRow({ partner: "scopely", scopeId: "login", status: "meeting", usedMinutes: 1, services: ["login"] }),
+      ]),
+      phase: "settled",
+      windowKey: "2026-09",
+      failure: null,
+      role: "technical",
+    });
+    expect(view.summary).toBe("Monitoring 3 SLA terms across 2 partners · 9 partners tracking only.");
+    expect(view.tiles.map((tile) => `${tile.label}=${tile.value}`)).toEqual(["Breaching=1", "At risk=1", "Meeting=1", "Tracking only=9"]);
+    expect(view.tiles[0]?.emphasis).toBe(true);
+    expect(view.attention.map((row) => `${row.partnerId}:${row.term.status}`)).toEqual(["scopely:breaching", "niantic:at_risk"]);
+    expect(view.attention[1]?.term.credit.text).toBe("no penalty clause → penalty clause, not yet entered");
+    expect(view.rail[0]?.id).toBe("scopely");
+    expect(view.rail[1]?.id).toBe("niantic");
+    expect(view.rail[2]?.termsLink).toEqual({ label: "Add contract terms", href: "/partners/kabam/terms" });
+    expect(view.settledNote).toBe(SETTLED_NOTE);
+    expect(view.rail.find((card) => card.id === "scopely")?.line).toBe("2 terms · 2 outages · 77.0 min");
+    expect(view.rail.find((card) => card.id === "niantic")?.line).toBe("1 term · 2 outages · 18.0 min");
+    expect(view.rail.find((card) => card.id === "kabam")?.line).toBe("0 services · 0 outages · 0.0 min recorded");
+
+    const html = renderToStaticMarkup(<OverviewPage view={view} />);
+    expect(html).toContain("99.950% / ");
+    expect(html).toContain("351.9% consumed");
+    expect(html).toContain('href="/partners/scopely?window=2026-09"');
+    expect(html).not.toContain("—");
+  });
+
+  it("renders the empty sentence, not an empty table, when nothing needs attention", () => {
+    const view = buildOverview({ partners: partnersWith([]), phase: "open", windowKey: "2026-09", failure: null, role: "technical" });
+    expect(view.attention).toEqual([]);
+    const html = renderToStaticMarkup(<OverviewPage view={view} />);
+    expect(html).toContain(NO_ATTENTION);
+    expect(html).not.toContain("<table");
+  });
+
+  it("renders Unavailable tiles and error rows when the feed failed, never zeros", () => {
+    const view = buildOverview({ partners: unavailablePartners(null, "technical"), phase: "open", windowKey: "2026-09", failure: QUERY_FAILED, role: "technical" });
+    expect(view.tiles.every((tile) => tile.value === "Unavailable")).toBe(true);
+    const html = renderToStaticMarkup(<OverviewPage view={view} />);
+    expect(html).toContain(QUERY_FAILED);
+    expect(view.rail).toHaveLength(11);
+    expect(view.rail.every((card) => card.unavailable)).toBe(true);
+    // One alert for the header, one for the attention slot, and one per rail card.
+    expect(html.match(/role="alert"/g)).toHaveLength(13);
+    expect(html).not.toContain("Tracking only</span>");
+    expect(html).not.toContain("flagged");
+    expect(html).not.toContain(">0<");
+  });
+});

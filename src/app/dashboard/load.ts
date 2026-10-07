@@ -1,86 +1,176 @@
 import { unstable_noStore as noStore } from "next/cache";
-import { getDatabase, readContractTerms } from "@/data";
-import { getSlaFeed, getViewer, listPilotPartners, resolveDashboardWindow, type TechnicalRow } from "@/feed";
-import { QUERY_FAILED, VIEWER_UNCONFIGURED } from "./copy";
+import { getDatabase, listAlertState, readContractTerms, type AlertStateRow } from "@/data";
+import {
+  getSlaFeed,
+  getSlaHealth,
+  getViewer,
+  listPilotPartners,
+  resolveDashboardWindow,
+  windowFromMonthKey,
+  windowPhase,
+  type TechnicalRow,
+  type UnusableRow,
+  type Viewer,
+} from "@/feed";
+import { HEALTH_UNAVAILABLE_CHIP, QUERY_FAILED, VIEWER_UNCONFIGURED, formatUtcTimestamp, healthChip, monthTitle } from "./copy";
 import {
   backtestErrorPanel,
-  buildBusinessViewerDashboard,
-  buildReadyDashboard,
-  buildUnavailableDashboard,
+  buildHealth,
+  buildMonthOptions,
   toBacktestPanel,
   type BacktestAttachment,
-  type DashboardModel,
+  type HealthView,
+  type MonthOption,
 } from "./model";
 import { runPartnerBacktest } from "./run-backtest";
+import { buildBusinessPartners, buildTechnicalPartners, unavailablePartners, type PartnerView, type TermsIndex } from "./view";
 
-export async function loadDashboard(
-  requestedWindow: string | undefined,
-  requestedBacktest?: string,
-): Promise<DashboardModel> {
+export { alertsBadge, healthBadge } from "./badges";
+
+export type Frame = {
+  windowKey: string;
+  windowTitle: string;
+  phase: "open" | "settled";
+  months: MonthOption[];
+  asOfLabel: string;
+};
+export type Chip = { label: string; tone: "neutral" | "warning" | "danger"; href: string | null };
+
+export type Workspace = {
+  role: "technical" | "business";
+  frame: Frame;
+  partners: PartnerView[];
+  /** QUERY_FAILED or VIEWER_UNCONFIGURED. Partners are then unavailablePartners(). */
+  failure: string | null;
+  /** Null for business. */
+  health: HealthView | { status: "error" } | null;
+  /** Technical only. Null when the health read failed. */
+  unusable: UnusableRow[] | null;
+  /** Null for business. */
+  alerts: AlertStateRow[] | { status: "error" } | null;
+  chip: Chip;
+  termsIndex: TermsIndex;
+  backtest: BacktestAttachment | null;
+};
+
+/** One feed read per request. Every page derives its sidebar, tiles, and tables from the result. */
+export async function loadWorkspace(input: { window?: string; backtestPartner?: string } = {}): Promise<Workspace> {
   noStore();
   const asOf = new Date();
-  const resolved = resolveDashboardWindow(requestedWindow, asOf);
-  const backtestPartner = pilotPartner(requestedBacktest);
+  const resolved = resolveDashboardWindow(input.window, asOf);
+  const phase = phaseFor(resolved.key, asOf);
+  const frame: Frame = {
+    windowKey: resolved.key,
+    windowTitle: monthTitle(resolved.key),
+    phase,
+    months: buildMonthOptions(asOf, resolved.key),
+    asOfLabel: formatUtcTimestamp(asOf.toISOString()),
+  };
 
-  let viewer;
+  let viewer: Viewer;
   try {
     viewer = getViewer();
   } catch (error) {
     console.error("[sla-dashboard] viewer", error);
-    return buildUnavailableDashboard({
-      asOf,
-      windowKey: resolved.key,
-      message: VIEWER_UNCONFIGURED,
-    });
+    return {
+      role: "technical",
+      frame,
+      partners: unavailablePartners(null, "technical"),
+      failure: VIEWER_UNCONFIGURED,
+      health: { status: "error" },
+      unusable: null,
+      alerts: { status: "error" },
+      chip: { label: HEALTH_UNAVAILABLE_CHIP, tone: "danger", href: "/health" },
+      termsIndex: null,
+      backtest: null,
+    };
   }
+  const role = viewer.role === "business" ? "business" : "technical";
+  const termsIndex = role === "technical" ? await loadTermsIndex() : null;
 
-  if (viewer.role === "business") {
-    return buildBusinessViewerDashboard({ asOf, windowKey: resolved.key });
-  }
-
-  const termsIndex = await loadTermsIndex();
-
+  let feed;
   try {
-    const feed = await getSlaFeed({
-      asOf,
-      window: resolved.window,
-      viewer,
-    });
-    if (feed.role === "business") {
-      return buildBusinessViewerDashboard({ asOf, windowKey: resolved.key });
-    }
-    const backtest = await loadBacktest(backtestPartner, asOf, termsIndex.bound, feed.rows);
-    return buildReadyDashboard({
-      asOf,
-      windowKey: resolved.key,
-      feed,
-      partnersWithTerms: termsIndex.withTerms,
-      boundPartners: termsIndex.bound,
-      backtest,
-    });
+    feed = await getSlaFeed({ asOf, window: resolved.window, viewer });
   } catch (error) {
     console.error("[sla-dashboard] feed", error);
-    const backtest = await loadBacktest(backtestPartner, asOf, termsIndex.bound, null);
-    return buildUnavailableDashboard({
-      asOf,
-      windowKey: resolved.key,
-      message: QUERY_FAILED,
-      partnersWithTerms: termsIndex.withTerms,
-      boundPartners: termsIndex.bound,
-      backtest,
-    });
+    return {
+      role,
+      frame,
+      partners: unavailablePartners(termsIndex, role),
+      failure: QUERY_FAILED,
+      health: role === "technical" ? { status: "error" } : null,
+      unusable: null,
+      alerts: role === "technical" ? await loadAlerts() : null,
+      chip: { label: HEALTH_UNAVAILABLE_CHIP, tone: "danger", href: role === "technical" ? "/health" : null },
+      termsIndex,
+      backtest: role === "technical" ? await loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, null) : null,
+    };
+  }
+
+  if (feed.role === "business") {
+    const chip = healthChip({ unusableCount: feed.health.unusableCount, partnersWithNoRows: 0 });
+    return {
+      role: "business",
+      frame,
+      partners: buildBusinessPartners(feed.rows, phase, resolved.key),
+      failure: null,
+      health: null,
+      unusable: null,
+      alerts: null,
+      chip: { ...chip, href: null },
+      termsIndex: null,
+      backtest: null,
+    };
+  }
+
+  const partners = buildTechnicalPartners(feed.rows, phase, resolved.key, termsIndex);
+  const health = buildHealth({ health: feed.health, ingestion: feed.ingestion, invalidTerms: feed.invalidTerms });
+  const chip = healthChip({
+    unusableCount: health.droppedRows,
+    partnersWithNoRows: health.partnersWithNoRows.length,
+    invalidTerms: health.invalidTerms.length,
+  });
+  return {
+    role: "technical",
+    frame,
+    partners,
+    failure: null,
+    health,
+    unusable: await loadUnusable(asOf, viewer),
+    alerts: await loadAlerts(),
+    chip: { ...chip, href: "/health" },
+    termsIndex,
+    backtest: await loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, feed.rows),
+  };
+}
+
+async function loadAlerts(): Promise<AlertStateRow[] | { status: "error" }> {
+  try {
+    return await listAlertState(getDatabase());
+  } catch (error) {
+    console.error("[sla-dashboard] alert state", error);
+    return { status: "error" };
   }
 }
 
-type TermsIndex = {
-  /** Null when the terms table could not be read. */
-  withTerms: ReadonlySet<string> | null;
-  /** Partners whose stored lifecycle is `contract_bound`. Null when the table could not be read. */
-  bound: ReadonlySet<string> | null;
-};
+/** The unusable rows only; the counts already came with the feed. */
+async function loadUnusable(asOf: Date, viewer: Viewer): Promise<UnusableRow[] | null> {
+  try {
+    const health = await getSlaHealth({ asOf, viewer });
+    return health.role === "business" ? null : health.unusable;
+  } catch (error) {
+    console.error("[sla-dashboard] health detail", error);
+    return null;
+  }
+}
+
+function phaseFor(windowKey: string, asOf: Date): "open" | "settled" {
+  const window = windowFromMonthKey(windowKey);
+  return window === null ? "open" : windowPhase(window, asOf);
+}
 
 /**
- * Null sets when the terms table cannot be read. The dashboard then does not
+ * Null when the terms table cannot be read. The dashboard then does not
  * guess Add versus View, and does not enable backtest from the table alone.
  */
 async function loadTermsIndex(): Promise<TermsIndex> {
@@ -89,10 +179,11 @@ async function loadTermsIndex(): Promise<TermsIndex> {
     return {
       withTerms: new Set(rows.map((row) => row.partnerSlug)),
       bound: new Set(rows.filter((row) => row.lifecycle === "contract_bound").map((row) => row.partnerSlug)),
+      draft: new Set(rows.filter((row) => row.lifecycle === "terms_pending_review").map((row) => row.partnerSlug)),
     };
   } catch (error) {
     console.error("[sla-dashboard] contract terms", error);
-    return { withTerms: null, bound: null };
+    return null;
   }
 }
 
