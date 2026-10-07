@@ -51,6 +51,7 @@ const config: Config = {
     borderRadius: {
       none: "0",
       DEFAULT: "var(--radius)",
+      full: "9999px",
     },
     fontFamily: {
       sans: "var(--font-sans)",
