@@ -316,29 +316,6 @@ export function ticketHref(url: string | null): string | null {
   return url;
 }
 
-export function healthChip(input: {
-  unusableCount: number;
-  partnersWithNoRows: number;
-  invalidTerms?: number;
-}): { label: string; tone: "neutral" | "warning" } {
-  const dropped =
-    input.unusableCount === 0
-      ? "No rows dropped"
-      : `${input.unusableCount} ${input.unusableCount === 1 ? "row" : "rows"} dropped`;
-  const coverage =
-    input.partnersWithNoRows === 0
-      ? null
-      : `${input.partnersWithNoRows} ${input.partnersWithNoRows === 1 ? "partner" : "partners"} with no rows`;
-  const invalidCount = input.invalidTerms ?? 0;
-  const invalid =
-    invalidCount === 0 ? null : `${invalidCount} ${invalidCount === 1 ? "invalid contract" : "invalid contracts"}`;
-  const label = [dropped, coverage, invalid].filter((part) => part !== null).join(" · ");
-  return {
-    label,
-    tone: input.unusableCount > 0 || invalidCount > 0 ? "warning" : "neutral",
-  };
-}
-
 export function reasonEntries(
   counts: Readonly<Record<string, number>>,
 ): { key: string; label: string; count: number }[] {
@@ -376,7 +353,8 @@ export const UPTIME_CAPTION = "UPTIME · MONTHLY";
 export const ALERTS_NOTE =
   "Transitions only. The job writes a row when a status rises and sends; recoveries are recorded without a message.";
 export const ALERTS_UNAVAILABLE = "Alert history unavailable.";
-export const HEALTH_UNAVAILABLE_CHIP = "Health unavailable";
+export const ENGINEER_VIEW = "Engineer view";
+export const BUSINESS_VIEW = "Business view";
 export const NEVER_ALERTED = "Never";
 export const TREND_NA = "n/a";
 

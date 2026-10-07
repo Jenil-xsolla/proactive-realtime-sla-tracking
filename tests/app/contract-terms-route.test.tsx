@@ -32,6 +32,8 @@ vi.mock("@/data", async (importOriginal) => {
   };
 });
 
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
+
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("NEXT_NOT_FOUND");

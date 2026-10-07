@@ -10,7 +10,7 @@ export type ShellFrame = {
   phase: "open" | "settled";
   months: MonthOption[];
   asOfLabel: string;
-  chip: { label: string; tone: "neutral" | "warning" | "danger"; href: string | null };
+  view: { active: "technical" | "business" };
 };
 
 /** Sidebar and top bar around every page. Below lg the sidebar stacks above the content. */

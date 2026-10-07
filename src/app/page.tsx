@@ -32,7 +32,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     role: workspace.role,
   });
   return (
-    <Shell nav={nav} frame={{ ...workspace.frame, chip: workspace.chip }} breadcrumb={[{ label: "Overview" }]}>
+    <Shell nav={nav} frame={{ ...workspace.frame, view: workspace.view }} breadcrumb={[{ label: "Overview" }]}>
       <OverviewPage view={view} />
     </Shell>
   );

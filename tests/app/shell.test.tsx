@@ -18,7 +18,7 @@ const frame = {
   phase: "open" as const,
   months: [{ key: "2026-09", title: "September 2026", phase: "open" as const, href: "/?window=2026-09", selected: true }],
   asOfLabel: "2026-09-23 15:58:00 UTC",
-  chip: { label: "No rows dropped", tone: "neutral" as const, href: "/health" },
+  view: { active: "technical" as const },
 };
 
 /** Opening tags of the anchors inside the sidebar <nav>, so the month menu's own links cannot match. */
@@ -29,6 +29,12 @@ function sidebarAnchors(html: string): string[] {
 
 function sidebarAnchor(html: string, href: string): string | undefined {
   return sidebarAnchors(html).find((tag) => tag.includes(`href="${href}"`));
+}
+
+/** The opening tags of the anchors inside the top bar's View toggle. */
+function toggleAnchors(html: string): string[] {
+  const nav = /<nav aria-label="View"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
+  return nav.match(/<a [^>]*>/g) ?? [];
 }
 
 function renderNav(active: Parameters<typeof buildNav>[0]["active"]): string {
@@ -77,7 +83,6 @@ describe("shell", () => {
     expect(sidebarAnchors(html).filter((tag) => tag.includes("aria-current"))).toHaveLength(1);
     expect(html).toContain(">2<");
     expect(html).toContain("Breaching");
-    expect(html).toContain("No rows dropped");
     expect(html).toContain("2026-09-23 15:58:00 UTC");
   });
 
@@ -110,7 +115,7 @@ describe("shell", () => {
 
   it("hides alerts and health for the business role", () => {
     const nav = buildNav({ windowKey: "2026-09", role: "business", partners: [partner("scopely", "Scopely")], alerts: null, health: null, active: { kind: "overview" } });
-    const html = renderToStaticMarkup(<Shell nav={nav} frame={{ ...frame, chip: { ...frame.chip, href: null } }} breadcrumb={[{ label: "Overview" }]}><p /></Shell>);
+    const html = renderToStaticMarkup(<Shell nav={nav} frame={{ ...frame, view: { active: "business" } }} breadcrumb={[{ label: "Overview" }]}><p /></Shell>);
     expect(html).not.toContain("/alerts");
     expect(html).not.toContain("/health");
     expect(sidebarAnchor(html, "/?window=2026-09")).toContain('aria-current="page"');
@@ -135,5 +140,33 @@ describe("shell", () => {
     const html = renderToStaticMarkup(<Shell nav={nav} frame={frame} breadcrumb={[{ label: "Health" }]} showWindow={false}><p /></Shell>);
     expect(html).not.toContain("Window");
     expect(html).toContain("as of");
+  });
+
+  it("renders the view toggle in place of a health chip, with the engineer view active", () => {
+    const html = renderNav({ kind: "overview" });
+    expect(html).not.toContain("No rows dropped");
+    expect(html).not.toContain("rows dropped");
+    expect(html).not.toContain("Health unavailable");
+    const anchors = toggleAnchors(html);
+    expect(anchors).toHaveLength(2);
+    expect(anchors[0]).toContain('href="/view/technical"');
+    expect(anchors[0]).toContain('aria-current="page"');
+    expect(anchors[1]).toContain('href="/view/business"');
+    expect(anchors[1]).not.toContain("aria-current");
+    expect(html).toContain("Engineer view");
+    expect(html).toContain("Business view");
+  });
+
+  it("marks the business segment as current in the business view and keeps the sidebar engineer links hidden", () => {
+    const nav = buildNav({ windowKey: "2026-09", role: "business", partners: [partner("scopely", "Scopely")], alerts: null, health: null, active: { kind: "overview" } });
+    const html = renderToStaticMarkup(<Shell nav={nav} frame={{ ...frame, view: { active: "business" } }} breadcrumb={[{ label: "Overview" }]}><p /></Shell>);
+    const anchors = toggleAnchors(html);
+    expect(anchors).toHaveLength(2);
+    expect(anchors[0]).toContain('href="/view/technical"');
+    expect(anchors[0]).not.toContain("aria-current");
+    expect(anchors[1]).toContain('href="/view/business"');
+    expect(anchors[1]).toContain('aria-current="page"');
+    expect(html).not.toContain('href="/alerts');
+    expect(html).not.toContain('href="/health');
   });
 });

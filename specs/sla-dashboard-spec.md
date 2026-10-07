@@ -96,6 +96,8 @@ This is the single most load-bearing detail in the design. Without it, historica
 
 Payload shaping happens on the server in two serialisers, not by conditional rendering in the client. The business payload never contains ticket keys, so they cannot leak through a missed conditional.
 
+Revised 2026-10-07: until SSO lands the role is a viewer preference. A top-bar toggle sets an `sla_view` cookie that overrides `VIEWER_ROLE`. The business view hides engineer-side material by construction, so nothing leaks through a missed conditional, but it is not an access boundary; SSO makes it one by replacing `resolveViewer`'s input with the session. The switch is a GET that sets a preference cookie, so a cross-site link can change a viewer's view; that is accepted because the view is a preference, not a boundary.
+
 ### AD-6 — No provisional data reaches any screen; terms are entered through the dashboard
 
 No invented or provisional SLA target exists anywhere in the running system. A partner with no active terms returns no scopes and stays tracking-only.
@@ -563,7 +565,7 @@ function getSlaFeed(input: {
 }): Promise<SlaFeed>
 ```
 
-Loads outages, resolves identities, fetches scopes, calls `evaluate()`, shapes by role. The dashboard calls it with the current user; the alert job calls it with a system viewer. That shared call is the mechanism behind GTOC-43's requirement that the two views cannot disagree.
+Loads outages, resolves identities, fetches scopes, calls `evaluate()`, shapes by role. The dashboard calls it with the current user; the alert job calls it with a system viewer. That shared call is the mechanism behind GTOC-43's requirement that the two views cannot disagree. `getSlaFeed` is unchanged by the view toggle: the dashboard resolves its viewer from the `sla_view` cookie first, then `VIEWER_ROLE`. The API routes and the alert job keep calling `getViewer()`, so the API follows the deployment default, not the cookie.
 
 ### 8.2 Serialisers
 
@@ -623,7 +625,7 @@ Structure is defined in `specs/2026-10-07-dashboard-ui-design.md` §4 to §9a: a
 
 **Zero and error must never look alike.** A partner rendering `0` because a query failed looks like flawless uptime. Errors render as an explicit error state on affected rows.
 
-**The health count is on every screen.** The top bar carries the dropped-rows chip on every page, linking to `/health`, which has its own sidebar badge. The detail lists live there, one click away. Hiding the *count* would reintroduce the failure the data layer was designed to prevent; the lists may move.
+**The health count is on every screen.** Every engineer screen carries the dropped-rows count in the sidebar Health badge, which links to `/health`. The detail lists live there, one click away. Hiding the *count* would reintroduce the failure the data layer was designed to prevent; the lists may move.
 
 **Closed windows show as settled, not final.** A late PIR can still move them.
 

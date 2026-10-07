@@ -48,7 +48,7 @@ export default async function PartnerTermsPage({
   return (
     <Shell
       nav={nav}
-      frame={{ ...workspace.frame, chip: workspace.chip }}
+      frame={{ ...workspace.frame, view: workspace.view }}
       showWindow={false}
       breadcrumb={[
         { label: "Overview", href: withWindow("/", workspace.frame.windowKey) },

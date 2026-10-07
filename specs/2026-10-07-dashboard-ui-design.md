@@ -42,7 +42,7 @@ All five routes exist on `sla-dashboard` only; `sla-ingestion`'s proxy keeps ret
 
 ### 3.1 Roles
 
-`getViewer()` decides the role per request, as today. The same routes serve both roles; the page reads the feed for its role and shapes a role-specific model on the server.
+`resolveViewer()` decides the role per request: the `sla_view` cookie when it names a dashboard role, otherwise `getViewer()` and `VIEWER_ROLE`. The same routes serve both roles; the viewer picks the role with the top-bar toggle, and the page reads the feed for that role and shapes a role-specific model on the server.
 
 | Route | technical / system | business |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ All five routes exist on `sla-dashboard` only; `sla-ingestion`'s proxy keeps ret
 | `/alerts` | Alert history | 404 |
 | `/health` | Data health | 404 |
 
-The business sidebar shows Overview and the partner list only. The top-bar health chip stays for business: `health.unusableCount` is in the business feed already. Its link target for business is none; the chip is text.
+The business sidebar shows Overview and the partner list only. The business 404s stay: switching to the business view on `/alerts`, `/health`, or a terms page returns to the Overview. The business view shows no health count.
 
 ## 4. Shell
 
@@ -60,7 +60,7 @@ One `Shell` component wraps every page. Props: `nav: NavModel`, `breadcrumb`, `c
 
 **Layout.** Fixed-width left sidebar (`--sidebar-width`, a new layout token in `globals.css`, `17rem`), `bg-sidebar`, 1px `border-border` on its right edge. Main column: a top bar, then content with a max width of `90rem` and generous section spacing. Below `lg` the sidebar becomes a horizontal row of links above the content. Mobile only has to work, not shine.
 
-**Top bar.** Left: breadcrumb (`Overview`, or `Overview › Scopely`). Right, in order: `WindowSelect` (existing component, month plus "In progress" or "Settled"), the `as of` timestamp in mono, and the health chip. The health chip reads `No rows dropped` in neutral tone or `3 rows dropped` in warning tone, and links to `/health`. When health could not be loaded it reads `Health unavailable` in danger tone. The top-bar month picker reloads the current route for the chosen month; routes that are not windowed (`/health` and the terms page) hide it and pass the window through to their links.
+**Top bar.** Left: breadcrumb (`Overview`, or `Overview › Scopely`). Right, in order: `WindowSelect` (existing component, month plus "In progress" or "Settled"), the `as of` timestamp in mono, and the view toggle. The toggle is two plain links in a `nav` labelled `View`: `Engineer view` and `Business view`. The active one is marked `aria-current="page"`. Each link goes to `/view/technical` or `/view/business`, a route that sets the `sla_view` cookie and redirects back to the page the viewer was on. Anyone can switch in both directions; `VIEWER_ROLE` is only the default. The top-bar month picker reloads the current route for the chosen month; routes that are not windowed (`/health` and the terms page) hide it and pass the window through to their links.
 
 **Sidebar.**
 
@@ -105,7 +105,7 @@ type Workspace =
 
 The `business` state carries the same `PartnerView[]` shape as `ready`, built by a second builder from `BusinessRow[]` (§11). It has no alerts, health detail, terms index, or backtest. The old `business_viewer` stub state is removed.
 
-Reads, in order: viewer, contract terms index, feed, alert state, health detail (`getSlaHealth`, for the unusable rows). The feed read and the alert-state read fail independently: a failed alert read makes the badge `!` and the Alerts page an error line, and leaves everything else working. The backtest attachment stays per partner and is only loaded on the partner page.
+Reads, in order: viewer (the `sla_view` cookie, then `VIEWER_ROLE`), contract terms index, feed, alert state. Health detail (`getSlaHealth`, for the unusable rows) is read only when `/health` asks for it. The feed read and the alert-state read fail independently: a failed alert read makes the badge `!` and the Alerts page an error line, and leaves everything else working. The backtest attachment stays per partner and is only loaded on the partner page.
 
 `Frame` is the existing `{ windowKey, windowTitle, phase, months }`.
 
@@ -229,7 +229,7 @@ Not windowed; health covers the whole extract.
 
 **Badge.** Sum of dropped rows, unresolved partners, unmatched services, invalid terms, failed PIRs, unresolved PIRs, and captures without a Slack message. Partners with no rows are excluded from the sum (expected for some partners). `warning` tone when > 0. If the feed or ingestion health failed, the badge is `!` in `danger` and the page shows the error state for that source while the other sources render.
 
-The top-bar chip (§4) keeps the dropped-rows count on every screen. This is the compromise with parent §9.3, and §9.3 is amended to say so.
+The sidebar Health badge keeps the dropped-rows count on every engineer screen. This is the compromise with parent §9.3, and §9.3 is amended to say so. The business view shows no health count.
 
 ## 9a. Business view
 
@@ -378,7 +378,8 @@ Applied to `specs/sla-dashboard-spec.md` with this slice:
 - §8.2: `toBusinessView` additionally carries `partnerId` (registry slug), `target`, `windowMinutes`, `elapsedMinutes`, `history`, and `versusMedian`. The exclusion list is unchanged.
 - §8.3: added `GET /alerts` and `GET /health` pages (not API routes) to the route table, technical role only.
 - §9.2: replaced with a pointer to this document's §4 to §9a.
-- §9.3: amended "The health panel is first-class" to: the dropped-rows count is on every screen in the top bar; the detail lives on `/health`, one click away, with its own sidebar badge.
+- §9.3: amended "The health panel is first-class" to: the dropped-rows count is on every engineer screen through the sidebar Health badge; the detail lives on `/health`, one click away.
+- AD-5 and §8.1: until SSO lands the role is a viewer preference set by the top-bar toggle through the `sla_view` cookie; the API routes and alert job keep using `getViewer()`.
 
 ## 14. Out of scope
 

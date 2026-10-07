@@ -22,7 +22,7 @@ describe("business role", () => {
 
     const partners = buildBusinessPartners(feed.rows, "open", WINDOW_KEY);
     const nav = buildNav({ windowKey: WINDOW_KEY, role: "business", partners, alerts: null, health: null, active: { kind: "overview" } });
-    const frame = { windowKey: WINDOW_KEY, windowTitle: "April 2026", phase: "open" as const, months: [], asOfLabel: "2026-04-20 00:00:00 UTC", chip: { label: "No rows dropped", tone: "neutral" as const, href: null } };
+    const frame = { windowKey: WINDOW_KEY, windowTitle: "April 2026", phase: "open" as const, months: [], asOfLabel: "2026-04-20 00:00:00 UTC", view: { active: "business" as const } };
     const overview = renderToStaticMarkup(
       <Shell nav={nav} frame={frame} breadcrumb={[{ label: "Overview" }]}>
         <OverviewPage view={buildOverview({ partners, phase: "open", windowKey: WINDOW_KEY, failure: null, role: "business" })} />

@@ -21,7 +21,7 @@ export default async function AlertsRoute({ searchParams }: { searchParams: Prom
   const nav = buildNav({ windowKey: workspace.frame.windowKey, role: workspace.role, partners: workspace.partners, alerts: alertsBadge(workspace.alerts, workspace.frame.windowKey), health: healthBadge(workspace.health), active: { kind: "alerts" } });
   const view = buildAlertsView({ alerts: workspace.alerts ?? { status: "error" }, filterKey, months: workspace.frame.months, partners: workspace.partners });
   return (
-    <Shell nav={nav} frame={{ ...workspace.frame, chip: workspace.chip }} breadcrumb={[{ label: "Alerts" }]}>
+    <Shell nav={nav} frame={{ ...workspace.frame, view: workspace.view }} breadcrumb={[{ label: "Alerts" }]}>
       <AlertsPage view={view} />
     </Shell>
   );

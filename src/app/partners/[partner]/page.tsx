@@ -43,7 +43,7 @@ export default async function PartnerPage({
   const view = buildPartnerPage({ partner, phase: workspace.frame.phase, windowKey: workspace.frame.windowKey, failure: workspace.failure, role: workspace.role });
   const backtest = workspace.backtest !== null && workspace.backtest.partner === id ? workspace.backtest.panel : null;
   return (
-    <Shell nav={nav} frame={{ ...workspace.frame, chip: workspace.chip }} breadcrumb={[{ label: "← Overview", href: withWindow("/", workspace.frame.windowKey) }, { label: partner.name }]}>
+    <Shell nav={nav} frame={{ ...workspace.frame, view: workspace.view }} breadcrumb={[{ label: "← Overview", href: withWindow("/", workspace.frame.windowKey) }, { label: partner.name }]}>
       <PartnerPageView view={view} backtest={backtest} />
     </Shell>
   );

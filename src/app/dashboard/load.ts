@@ -1,18 +1,20 @@
 import { unstable_noStore as noStore } from "next/cache";
+import { cookies } from "next/headers";
 import { getDatabase, listAlertState, readContractTerms, type AlertStateRow } from "@/data";
 import {
   getSlaFeed,
   getSlaHealth,
-  getViewer,
   listPilotPartners,
   resolveDashboardWindow,
+  resolveViewer,
+  VIEW_COOKIE,
   windowFromMonthKey,
   windowPhase,
   type TechnicalRow,
   type UnusableRow,
   type Viewer,
 } from "@/feed";
-import { HEALTH_UNAVAILABLE_CHIP, QUERY_FAILED, VIEWER_UNCONFIGURED, formatUtcTimestamp, healthChip, monthTitle } from "./copy";
+import { QUERY_FAILED, VIEWER_UNCONFIGURED, formatUtcTimestamp, monthTitle } from "./copy";
 import {
   backtestErrorPanel,
   buildHealth,
@@ -34,7 +36,6 @@ export type Frame = {
   months: MonthOption[];
   asOfLabel: string;
 };
-export type Chip = { label: string; tone: "neutral" | "warning" | "danger"; href: string | null };
 
 export type Workspace = {
   role: "technical" | "business";
@@ -48,7 +49,8 @@ export type Workspace = {
   unusable: UnusableRow[] | null;
   /** Null for business. */
   alerts: AlertStateRow[] | { status: "error" } | null;
-  chip: Chip;
+  /** Which segment of the top-bar toggle is active. */
+  view: { active: "technical" | "business" };
   termsIndex: TermsIndex;
   backtest: BacktestAttachment | null;
 };
@@ -72,9 +74,11 @@ export async function loadWorkspace(
     asOfLabel: formatUtcTimestamp(asOf.toISOString()),
   };
 
+  // Read outside the try: a dynamic-API bailout must not be mistaken for a bad VIEWER_ROLE.
+  const override = (await cookies()).get(VIEW_COOKIE)?.value;
   let viewer: Viewer;
   try {
-    viewer = getViewer();
+    viewer = resolveViewer(override);
   } catch (error) {
     console.error("[sla-dashboard] viewer", error);
     return {
@@ -85,7 +89,7 @@ export async function loadWorkspace(
       health: { status: "error" },
       unusable: null,
       alerts: { status: "error" },
-      chip: { label: HEALTH_UNAVAILABLE_CHIP, tone: "danger", href: "/health" },
+      view: { active: "technical" },
       termsIndex: null,
       backtest: null,
     };
@@ -110,14 +114,13 @@ export async function loadWorkspace(
       health: role === "technical" ? { status: "error" } : null,
       unusable: null,
       alerts,
-      chip: { label: HEALTH_UNAVAILABLE_CHIP, tone: "danger", href: role === "technical" ? "/health" : null },
+      view: { active: role },
       termsIndex,
       backtest,
     };
   }
 
   if (feed.role === "business") {
-    const chip = healthChip({ unusableCount: feed.health.unusableCount, partnersWithNoRows: 0 });
     return {
       role: "business",
       frame,
@@ -126,7 +129,7 @@ export async function loadWorkspace(
       health: null,
       unusable: null,
       alerts: null,
-      chip: { ...chip, href: null },
+      view: { active: "business" },
       termsIndex: null,
       backtest: null,
     };
@@ -134,11 +137,6 @@ export async function loadWorkspace(
 
   const partners = buildTechnicalPartners(feed.rows, phase, resolved.key, termsIndex);
   const health = buildHealth({ health: feed.health, ingestion: feed.ingestion, invalidTerms: feed.invalidTerms });
-  const chip = healthChip({
-    unusableCount: health.droppedRows,
-    partnersWithNoRows: health.partnersWithNoRows.length,
-    invalidTerms: health.invalidTerms.length,
-  });
   const [alerts, backtest, unusable] = await Promise.all([
     loadAlerts(),
     loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, feed.rows),
@@ -152,7 +150,7 @@ export async function loadWorkspace(
     health,
     unusable,
     alerts,
-    chip: { ...chip, href: "/health" },
+    view: { active: "technical" },
     termsIndex,
     backtest,
   };

@@ -8,17 +8,20 @@ import { businessScoredRow, scoredRow } from "../support/rows";
 const mocks = vi.hoisted(() => ({
   getSlaFeed: vi.fn(),
   getSlaHealth: vi.fn(),
-  getViewer: vi.fn(),
   listAlertState: vi.fn(),
   readContractTerms: vi.fn(),
 }));
+const originalRole = process.env.VIEWER_ROLE;
+const cookieBox = vi.hoisted(() => ({ value: undefined as string | undefined }));
 
 vi.mock("next/cache", () => ({ unstable_noStore: () => undefined }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (name: string) => (name === "sla_view" && cookieBox.value !== undefined ? { name, value: cookieBox.value } : undefined) }),
+}));
 vi.mock("@/feed", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/feed")>()),
   getSlaFeed: mocks.getSlaFeed,
   getSlaHealth: mocks.getSlaHealth,
-  getViewer: mocks.getViewer,
 }));
 vi.mock("@/data", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/data")>()),
@@ -71,7 +74,7 @@ const alertRow: AlertStateRow = {
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => undefined);
-  mocks.getViewer.mockReturnValue({ role: "technical" });
+  process.env.VIEWER_ROLE = "technical";
   mocks.getSlaHealth.mockResolvedValue({ role: "technical", unusable: [] });
   mocks.listAlertState.mockResolvedValue([alertRow]);
   mocks.readContractTerms.mockResolvedValue([{ partnerSlug: "scopely", lifecycle: "contract_bound" }]);
@@ -80,6 +83,12 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   Object.values(mocks).forEach((mock) => mock.mockReset());
+  cookieBox.value = undefined;
+  if (originalRole === undefined) {
+    delete process.env.VIEWER_ROLE;
+  } else {
+    process.env.VIEWER_ROLE = originalRole;
+  }
 });
 
 describe("loadWorkspace", () => {
@@ -92,7 +101,7 @@ describe("loadWorkspace", () => {
     expect(workspace.alerts).toEqual([alertRow]);
     expect(workspace.health).toEqual({ status: "error" });
     expect(workspace.unusable).toBeNull();
-    expect(workspace.chip).toMatchObject({ tone: "danger", href: "/health" });
+    expect(workspace.view).toEqual({ active: "technical" });
   });
 
   it("builds partners normally when only the alert read fails", async () => {
@@ -111,7 +120,7 @@ describe("loadWorkspace", () => {
   });
 
   it("returns no health, alerts, terms index or backtest for the business role", async () => {
-    mocks.getViewer.mockReturnValue({ role: "business" });
+    process.env.VIEWER_ROLE = "business";
     mocks.getSlaFeed.mockResolvedValue(businessFeed());
     const workspace = await loadWorkspace({ backtestPartner: "scopely" });
     expect(workspace.role).toBe("business");
@@ -126,21 +135,19 @@ describe("loadWorkspace", () => {
   });
 
   it("keeps the business boundary when the feed throws", async () => {
-    mocks.getViewer.mockReturnValue({ role: "business" });
+    process.env.VIEWER_ROLE = "business";
     mocks.getSlaFeed.mockRejectedValue(new Error("db down"));
     const workspace = await loadWorkspace({ backtestPartner: "scopely" });
     expect(workspace.failure).toBe(QUERY_FAILED);
     expect(workspace.health).toBeNull();
     expect(workspace.alerts).toBeNull();
     expect(workspace.backtest).toBeNull();
-    expect(workspace.chip.href).toBeNull();
+    expect(workspace.view).toEqual({ active: "business" });
     expect(workspace.partners.every((partner) => partner.unavailable && partner.merchantIds === null)).toBe(true);
   });
 
   it("reports an unconfigured viewer without reading the feed", async () => {
-    mocks.getViewer.mockImplementation(() => {
-      throw new Error("VIEWER_ROLE must be business, technical, or system.");
-    });
+    process.env.VIEWER_ROLE = "nonsense";
     const workspace = await loadWorkspace({});
     expect(workspace.failure).toBe(VIEWER_UNCONFIGURED);
     expect(workspace.partners.every((partner) => partner.unavailable)).toBe(true);
@@ -181,5 +188,31 @@ describe("loadWorkspace", () => {
     expect(workspace.frame.months.every((month) => month.href.startsWith("/alerts?window="))).toBe(true);
     const home = await loadWorkspace({});
     expect(home.frame.months.every((month) => month.href.startsWith("/?window="))).toBe(true);
+  });
+
+  it("lets the view cookie override the viewer role, and follows the deployment default without one", async () => {
+    process.env.VIEWER_ROLE = "technical";
+    mocks.getSlaFeed.mockImplementation(async ({ viewer }: { viewer: { role: string } }) => (viewer.role === "business" ? businessFeed() : technicalFeed()));
+
+    cookieBox.value = "business";
+    const business = await loadWorkspace({});
+    expect(business.role).toBe("business");
+    expect(business.view).toEqual({ active: "business" });
+    expect(mocks.getSlaFeed.mock.calls[0]?.[0].viewer).toEqual({ role: "business" });
+    expect(business.health).toBeNull();
+
+    cookieBox.value = undefined;
+    const fallback = await loadWorkspace({});
+    expect(fallback.role).toBe("technical");
+    expect(fallback.view).toEqual({ active: "technical" });
+  });
+
+  it("lets a technical cookie win over a business deployment default", async () => {
+    process.env.VIEWER_ROLE = "business";
+    mocks.getSlaFeed.mockResolvedValue(technicalFeed());
+    cookieBox.value = "technical";
+    const workspace = await loadWorkspace({});
+    expect(workspace.role).toBe("technical");
+    expect(workspace.view).toEqual({ active: "technical" });
   });
 });

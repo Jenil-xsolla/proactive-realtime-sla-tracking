@@ -18,7 +18,7 @@ export default async function HealthRoute({ searchParams }: { searchParams: Prom
   }
   const nav = buildNav({ windowKey: workspace.frame.windowKey, role: workspace.role, partners: workspace.partners, alerts: alertsBadge(workspace.alerts, workspace.frame.windowKey), health: healthBadge(workspace.health), active: { kind: "health" } });
   return (
-    <Shell nav={nav} frame={{ ...workspace.frame, chip: workspace.chip }} breadcrumb={[{ label: "Health" }]} showWindow={false}>
+    <Shell nav={nav} frame={{ ...workspace.frame, view: workspace.view }} breadcrumb={[{ label: "Health" }]} showWindow={false}>
       <HealthPage health={workspace.health ?? { status: "error" }} unusable={workspace.unusable === null ? null : unusableRows(workspace.unusable)} />
     </Shell>
   );
