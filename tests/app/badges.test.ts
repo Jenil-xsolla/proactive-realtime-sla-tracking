@@ -23,7 +23,7 @@ function health(overrides: Partial<HealthView> = {}): HealthView {
 }
 
 function alert(overrides: Partial<AlertStateRow>): AlertStateRow {
-  return { partnerSlug: "scopely", scopeId: "payments", period: "2026-09", lastStatus: "breaching", lastAlertedAt: null, alertCount: 1, updatedAt: new Date(0), ...overrides };
+  return { partnerSlug: "scopely", scopeId: "payments", period: "2026-09", lastStatus: "breached", lastAlertedAt: null, alertCount: 1, updatedAt: new Date(0), ...overrides };
 }
 
 describe("badges", () => {

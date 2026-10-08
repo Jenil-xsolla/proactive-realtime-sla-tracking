@@ -39,17 +39,31 @@ describe("tracking table", () => {
     expect(summary.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("renders a row without outages as a plain, non-expanding row", () => {
+  it("shows the window trend in the expanded panel, not as a column", () => {
+    document.body.innerHTML = renderToStaticMarkup(<TrackingTable partnerName="Scopely" rows={rows()} />);
+    const header = document.querySelector("thead")?.textContent ?? "";
+    expect(header).not.toContain("Window trend");
+    const summary = document.querySelector("summary") as HTMLElement;
+    expect(summary.querySelector("svg[role='img']")).toBeNull();
+    const panel = document.getElementById(summary.getAttribute("aria-controls") ?? "");
+    expect(panel?.textContent).toContain("Window trend");
+    expect(panel?.querySelector("svg[role='img']")).not.toBeNull();
+  });
+
+  it("expands a row without outages to the trend only", () => {
     const [row] = rows();
     const html = renderToStaticMarkup(<TrackingTable partnerName="Scopely" rows={[{ ...row!, outages: null }]} />);
-    expect(html).not.toContain("<details");
+    expect(html).toContain("<details");
+    expect(html).not.toContain("data-outages");
+    expect(html).toContain("Window trend");
+    expect(html).toContain("Show trend for Scopely, Payments");
     expect(html).toContain("Payments");
   });
 
   it("renders the unavailable row in the danger tone, never as zero", () => {
     const row: TrackingView = {
       key: "scopely:unavailable", service: UNAVAILABLE, minutes: UNAVAILABLE, incidents: UNAVAILABLE, usedMinutes: 0, outageCount: 0,
-      comparison: ROW_UNAVAILABLE, trend: buildTrend([], "2026-09", 0, null), outages: null, reconciliation: "",
+      comparison: ROW_UNAVAILABLE, trend: buildTrend([], "2026-09", 0), outages: null, reconciliation: "",
     };
     const html = renderToStaticMarkup(<TrackingTable partnerName="Scopely" rows={[row]} unavailable />);
     expect(html).toContain(ROW_UNAVAILABLE);

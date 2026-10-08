@@ -4,7 +4,12 @@ import { TrendSparkline } from "@/app/dashboard/trend-sparkline";
 import { buildTrend } from "@/app/dashboard/view";
 
 const history = [
-  { month: "2026-03", usedMinutes: null },
+  { month: "2025-10", usedMinutes: null },
+  { month: "2025-11", usedMinutes: null },
+  { month: "2025-12", usedMinutes: null },
+  { month: "2026-01", usedMinutes: 4 },
+  { month: "2026-02", usedMinutes: 0 },
+  { month: "2026-03", usedMinutes: 9 },
   { month: "2026-04", usedMinutes: 0 },
   { month: "2026-05", usedMinutes: 12 },
   { month: "2026-06", usedMinutes: 30 },
@@ -12,23 +17,22 @@ const history = [
   { month: "2026-08", usedMinutes: 20 },
 ];
 
-describe("trend column", () => {
-  it("renders six prior bars plus the current month and the mark text", () => {
-    const html = renderToStaticMarkup(<TrendSparkline trend={buildTrend(history, "2026-09", 76, "above")} status="breaching" />);
-    expect(html.match(/<rect/g)).toHaveLength(6);
-    expect(html).toContain("above median");
+describe("window trend", () => {
+  it("renders eleven prior months plus the current month, with a gap for each month before coverage", () => {
+    const html = renderToStaticMarkup(<TrendSparkline trend={buildTrend(history, "2026-09", 76)} status="breached" />);
+    expect(html.match(/<rect/g)).toHaveLength(9);
     expect(html).toContain("<title>September 2026: 76.0 min</title>");
+    expect(html).toContain("<title>January 2026: 4.0 min</title>");
+    expect(html).toContain("October 2025: no data");
+    expect(html).toContain(">Oct</span>");
+    expect(html).toContain(">Sep</span>");
   });
 
-  it("writes n/a when there is no comparison, with no leading space or glyph", () => {
-    const html = renderToStaticMarkup(<TrendSparkline trend={buildTrend(history, "2026-09", 5, null)} status={null} />);
-    expect(html).toContain("n/a");
+  it("stretches to the full width and carries no median comparison", () => {
+    const html = renderToStaticMarkup(<TrendSparkline trend={buildTrend(history, "2026-09", 76)} status="breached" />);
+    expect(html).toContain('width="100%"');
     expect(html).not.toMatch(/[↑↓→]/);
-    expect(html).toContain('text-muted-foreground">n/a</span>');
-  });
-
-  it("hides the arrow glyph from assistive technology", () => {
-    const html = renderToStaticMarkup(<TrendSparkline trend={buildTrend(history, "2026-09", 76, "above")} status="breaching" />);
-    expect(html).toContain('<span aria-hidden="true">↑</span> above median');
+    expect(html).not.toContain("median");
+    expect(html).not.toContain("n/a");
   });
 });

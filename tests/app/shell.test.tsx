@@ -55,7 +55,7 @@ describe("shell", () => {
       windowKey: "2026-09",
       role: "technical",
       partners: [
-        partner("scopely", "Scopely", { worst: "breaching", trackingOnly: false }),
+        partner("scopely", "Scopely", { worst: "breached", trackingOnly: false }),
         partner("niantic", "Niantic", { worst: "at_risk", trackingOnly: false }),
         partner("kabam", "Kabam", { worst: "meeting", trackingOnly: false }),
         partner("roblox", "Roblox"),
@@ -64,7 +64,7 @@ describe("shell", () => {
       health: { count: 0 },
       active: { kind: "partner", id: "niantic" },
     });
-    expect(nav.partners.map((entry) => entry.tone)).toEqual(["breaching", "at_risk", "meeting", "tracking"]);
+    expect(nav.partners.map((entry) => entry.tone)).toEqual(["breached", "at_risk", "meeting", "tracking"]);
     expect(nav.partners[0]?.href).toBe("/partners/scopely?window=2026-09");
     expect(withWindow("/alerts", "2026-09")).toBe("/alerts?window=2026-09");
 
@@ -82,7 +82,7 @@ describe("shell", () => {
     expect(sidebarAnchor(html, "/partners/scopely?window=2026-09")).not.toContain("aria-current");
     expect(sidebarAnchors(html).filter((tag) => tag.includes("aria-current"))).toHaveLength(1);
     expect(html).toContain(">2<");
-    expect(html).toContain("Breaching");
+    expect(html).toContain("Breached");
     expect(html).toContain("2026-09-23 15:58:00 UTC");
   });
 
@@ -99,7 +99,7 @@ describe("shell", () => {
     const html = renderToStaticMarkup(<Shell nav={nav} frame={frame} breadcrumb={[{ label: "Overview" }]}><p /></Shell>);
     expect(html.match(/>!</g)?.length).toBeGreaterThanOrEqual(2);
     for (const entry of nav.partners) expect(html).toContain(entry.name);
-    for (const label of ["Breaching", "At risk", "Meeting", "Tracking only"]) expect(html).not.toContain(label);
+    for (const label of ["Breached", "At risk", "Meeting", "Tracking only"]) expect(html).not.toContain(label);
     expect(html).not.toContain("rounded-full");
   });
 

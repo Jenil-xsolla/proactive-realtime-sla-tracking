@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UNUSABLE_REASONS } from "@/data";
 import type { AlertStateRow } from "@/data";
 import type { SlaFeed } from "@/feed";
+import { DbTermsProvider } from "@/terms";
 import { QUERY_FAILED, VIEWER_UNCONFIGURED } from "@/app/dashboard/copy";
 import { businessScoredRow, scoredRow } from "../support/rows";
 
@@ -66,7 +67,7 @@ const alertRow: AlertStateRow = {
   partnerSlug: "scopely",
   scopeId: "payments",
   period: "2026-10",
-  lastStatus: "breaching",
+  lastStatus: "breached",
   lastAlertedAt: null,
   alertCount: 1,
   updatedAt: new Date(0),
@@ -160,6 +161,17 @@ describe("loadWorkspace", () => {
     mocks.getSlaFeed.mockResolvedValue(technicalFeed());
     await loadWorkspace({});
     expect(mocks.getSlaFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads contract terms once per request and hands the same rows to the feed", async () => {
+    mocks.getSlaFeed.mockResolvedValue(technicalFeed());
+    const workspace = await loadWorkspace({});
+    expect(mocks.readContractTerms).toHaveBeenCalledTimes(1);
+    const sources = mocks.getSlaFeed.mock.calls[0]?.[0].sources;
+    expect(sources?.terms).toBeInstanceOf(DbTermsProvider);
+    expect(await sources.terms.listScopes("scopely", new Date())).toEqual([]);
+    expect(mocks.readContractTerms).toHaveBeenCalledTimes(1);
+    expect(workspace.termsIndex?.bound.has("scopely")).toBe(true);
   });
 
   it("never reads the second health view by default, and reads it once when asked", async () => {

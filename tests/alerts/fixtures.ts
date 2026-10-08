@@ -17,7 +17,7 @@ export function systemFeed(rows: TechnicalRow[], asOf = "2026-09-15T12:00:00.000
 }
 
 export function scoredRow(
-  status: "meeting" | "at_risk" | "breaching",
+  status: "meeting" | "at_risk" | "breached",
 ): Extract<TechnicalRow, { kind: "scored" }> {
   return {
     kind: "scored",
@@ -44,7 +44,7 @@ export function scoredRow(
       projected: { kind: "credit", creditFraction: 0.25, amount: null },
     },
     reason: {
-      rule: status === "breaching" ? "breaching" : status === "at_risk" ? "trend" : "meeting",
+      rule: status === "breached" ? "breaching" : status === "at_risk" ? "trend" : "meeting",
       fired: status === "at_risk" ? ["trend"] : [],
       elapsedFraction: 0.5,
       consumedFraction: 0.9,

@@ -302,10 +302,11 @@ function trackingRows<P extends string, S extends string>(
   return results;
 }
 
+const HISTORY_MONTHS = 11;
 const BASELINE_LOOKBACK_MONTHS = 6;
 
 /**
- * Used minutes for each of the six calendar months before the window's
+ * Used minutes for each of the eleven calendar months before the window's
  * month, oldest first. A month that starts before coverage is null.
  */
 function monthHistory<P extends string, S extends string>(
@@ -317,7 +318,7 @@ function monthHistory<P extends string, S extends string>(
   const year = window.start.getUTCFullYear();
   const month = window.start.getUTCMonth();
   const history: MonthHistory[] = [];
-  for (let delta = BASELINE_LOOKBACK_MONTHS; delta >= 1; delta -= 1) {
+  for (let delta = HISTORY_MONTHS; delta >= 1; delta -= 1) {
     const startMs = Date.UTC(year, month - delta, 1);
     const endMs = Date.UTC(year, month - delta + 1, 1);
     const label = monthLabel(new Date(startMs));
@@ -335,9 +336,9 @@ function monthLabel(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-/** The comparison is derived from the history, so the two cannot disagree. */
+/** The comparison is derived from the last six months of the history, so the two cannot disagree. */
 function baseline(history: readonly MonthHistory[], currentMinutes: number): BaselineComparison {
-  const totals = history.flatMap((entry) => (entry.usedMinutes === null ? [] : [entry.usedMinutes]));
+  const totals = history.slice(-BASELINE_LOOKBACK_MONTHS).flatMap((entry) => (entry.usedMinutes === null ? [] : [entry.usedMinutes]));
   const coveredMonths = totals.length;
   const monthsWithDowntime = totals.filter((minutes) => minutes > 0).length;
   if (coveredMonths < MIN_BASELINE_MONTHS) {

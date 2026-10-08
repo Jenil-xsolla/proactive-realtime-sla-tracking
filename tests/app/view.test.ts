@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { BusinessRow, TechnicalRow } from "@/feed";
 import { buildBusinessPartners, buildTechnicalPartners, buildTrend, unavailablePartners, worstStatus } from "@/app/dashboard/view";
-import { CLAUSE_NOT_RECORDED, NO_TICKETS, TREND_NA } from "@/app/dashboard/copy";
+import { CLAUSE_NOT_RECORDED, NO_TICKETS } from "@/app/dashboard/copy";
 import { businessScoredRow, history, scoredRow } from "../support/rows";
 
 describe("view model", () => {
   it("builds a technical term with linked tickets, outages, clause, and a trend", () => {
     const [scopely] = buildTechnicalPartners([scoredRow()], "open", "2026-09", null);
     expect(scopely?.id).toBe("scopely");
-    expect(scopely?.worst).toBe("breaching");
+    expect(scopely?.worst).toBe("breached");
     const term = scopely?.terms[0];
     expect(term).toMatchObject({
       title: "Payments",
@@ -28,7 +28,6 @@ describe("view model", () => {
     expect(term?.trend.bars).toHaveLength(7);
     expect(term?.trend.bars[0]).toEqual({ month: "2026-03", label: "March 2026", minutes: null, current: false });
     expect(term?.trend.bars[6]).toEqual({ month: "2026-09", label: "September 2026", minutes: 76, current: true });
-    expect(term?.trend.text).toBe("above median");
   });
 
   it("builds the same term from a business row without engineer-only material", () => {
@@ -53,11 +52,9 @@ describe("view model", () => {
     expect(failed[0]).toMatchObject({ unavailable: true, contractTerms: "unknown", terms: [], tracking: [] });
   });
 
-  it("renders a trend with n/a when there is no comparison", () => {
-    const trend = buildTrend(history, "2026-09", 5, null);
-    expect(trend.mark).toBe("none");
-    expect(trend.text).toBe(TREND_NA);
-    expect(trend.summary).toContain("September 2026: 5.0 min");
+  it("summarises every month of the trend, the current one last", () => {
+    const trend = buildTrend(history, "2026-09", 5);
+    expect(trend).toEqual({ bars: expect.any(Array), summary: expect.stringMatching(/; September 2026: 5\.0 min$/) });
   });
 
   it("lists one ticket per PIR when a multi-service scope has one outage row per service", () => {
@@ -94,7 +91,7 @@ describe("view model", () => {
 
   it("picks the worst status", () => {
     expect(worstStatus(["meeting", "at_risk"])).toBe("at_risk");
-    expect(worstStatus(["breaching", "meeting"])).toBe("breaching");
+    expect(worstStatus(["breached", "meeting"])).toBe("breached");
     expect(worstStatus([])).toBeNull();
   });
   it("computes settled uptime over the full window and drops the to-date caption", () => {
@@ -130,7 +127,6 @@ describe("view model", () => {
       incidents: "1",
       outageCount: 1,
       comparison: "Not enough history to compare yet.",
-      trend: { mark: "none", text: TREND_NA },
     });
     expect(technical?.tracking[0]?.outages).toHaveLength(1);
 
@@ -156,8 +152,8 @@ describe("view model", () => {
       comparison: "Above this partner's six-month median of 12.0 min",
       outages: null,
       reconciliation: "",
-      trend: { mark: "up", text: "above median" },
     });
+    expect(business?.tracking[0]?.trend.bars.at(-1)).toMatchObject({ month: "2026-09", minutes: 26, current: true });
   });
 
   it("renders business credit for the none and unknown kinds as the feed's own statements", () => {

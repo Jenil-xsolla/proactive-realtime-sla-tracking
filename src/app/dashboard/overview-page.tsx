@@ -14,7 +14,7 @@ export function OverviewPage({ view }: { view: OverviewView }) {
       </header>
       <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {view.tiles.map((tile) => (
-          <Tile key={tile.label} label={tile.label} value={tile.value} detail={tile.detail} tone={tile.tone} emphasis={tile.emphasis} />
+          <Tile key={tile.label} label={tile.label} value={tile.value} detail={tile.detail} tone={tile.tone} labelTone={tile.labelTone} emphasis={tile.emphasis} />
         ))}
       </section>
       <div className="grid gap-10 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">

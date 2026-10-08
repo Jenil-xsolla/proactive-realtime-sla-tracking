@@ -92,7 +92,7 @@ export type TechnicalRow =
       usedMinutes: number;
       remainingMinutes: number;
       burnRate: number;
-      status: "meeting" | "at_risk" | "breaching";
+      status: "meeting" | "at_risk" | "breached";
       projectedExhaustion: string | null;
       /** ISO-8601 start of the scored window. Later than the calendar month when prorated. */
       windowStart: string;
@@ -131,7 +131,7 @@ export type BusinessRow =
       partner: string;
       partnerId: string;
       scope: string;
-      status: "meeting" | "at_risk" | "breaching";
+      status: "meeting" | "at_risk" | "breached";
       /** Uptime target as a fraction, as the contract states it. */
       target: number;
       consumedBudget: {

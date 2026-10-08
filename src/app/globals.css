@@ -7,7 +7,8 @@
   .cursor/rules/xsolla-design-system.mdc.
   --warning is not in that file. The SLA spec requires a warning colour for
   at-risk status, in both themes, before any badge exists. --danger follows
-  the existing destructive colour.
+  the existing destructive colour. --success is the meeting-title green,
+  darkened on light backgrounds so the label stays readable.
 */
 :root {
   --font-sans: var(--font-dm-sans), Arial, sans-serif;
@@ -32,6 +33,7 @@
   --destructive: #ff005b;
   --danger: var(--destructive);
   --warning: #8c5e00;
+  --success: #1a7a34;
 
   --chart-1: #31cae8;
   --chart-2: #80eaff;
@@ -57,6 +59,7 @@
     --accent: #80eaff;
     --destructive: #ff3977;
     --warning: #e8b339;
+    --success: #3dce6e;
 
     --chart-1: #31cae8;
     --chart-2: #80eaff;

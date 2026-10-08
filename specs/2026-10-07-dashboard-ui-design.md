@@ -85,7 +85,7 @@ Active entry: `bg-secondary` with a 2px `primary` left edge. No partner filter i
 ```ts
 type NavModel = {
   windowKey: string
-  partners: { id: string; name: string; href: string; tone: "breaching" | "at_risk" | "meeting" | "tracking" | "unknown" }[]
+  partners: { id: string; name: string; href: string; tone: "breached" | "at_risk" | "meeting" | "tracking" | "unknown" }[]
   alerts: { count: number } | { status: "error" } | null   // null for business
   health: { count: number } | { status: "error" } | null   // null for business
   active: { kind: "overview" } | { kind: "alerts" } | { kind: "health" } | { kind: "partner"; id: string }
@@ -117,12 +117,12 @@ Reads, in order: viewer (the `sla_view` cookie, then `VIEWER_ROLE`), contract te
 
 | Tile | Figure | Treatment |
 | --- | --- | --- |
-| Breaching | scored scopes with status `breaching` | tile background tinted `danger` at low opacity and figure in `danger` when > 0 |
+| Breached | scored scopes with status `breached` | tile background tinted `danger` at low opacity and figure in `danger` when > 0 |
 | At risk | scored scopes with status `at_risk` | figure in `warning` when > 0 |
 | Meeting | scored scopes with status `meeting` | plain |
 | Tracking only | partners with no bound terms | muted, sub-line `No target, no status` |
 
-**Needs attention.** A table of every scored scope with status `at_risk` or `breaching`, breaching first, then consumed fraction descending.
+**Needs attention.** A table of every scored scope with status `at_risk` or `breached`, breached first, then consumed fraction descending.
 
 | Column | Content |
 | --- | --- |
@@ -132,7 +132,7 @@ Reads, in order: viewer (the `sla_view` cookie, then `VIEWER_ROLE`), contract te
 | Error budget | `BudgetBar` then `351.9% consumed` in mono beneath |
 | Credit | `0% → 5%` (incurred → projected). "No penalty clause" or "Not entered" verbatim when that is the figure's kind. Never `0%` for an unknown |
 
-Empty: a sentence, `No term is at risk or breaching in this window.`, not an empty table.
+Empty: a sentence, `No term is at risk or breached in this window.`, not an empty table.
 
 **Partner status rail.** Right column, one card per pilot partner, sorted worst status first, then by counted minutes descending. Card: name (link), worst status badge or `Tracking only` chip, mono line `3 terms · 4 outages · 86.0 min`. Tracking-only cards show `2 services · 3 outages · 41.0 min recorded` and a link `Add contract terms` when none exist, `Draft terms, not scoring` when terms are saved but not active.
 
@@ -148,12 +148,12 @@ Empty: a sentence, `No term is at risk or breaching in this window.`, not an emp
 | --- | --- | --- |
 | Covered services | scored terms | `4 outage instances` (distinct PIR keys across terms) |
 | At risk | at risk plus breaching, `/ total` | `warning` when > 0 |
-| Breaching | breaching count | `danger` when > 0 |
+| Breached | breaching count | `danger` when > 0 |
 | Downtime this window | counted minutes summed across terms | `of 66.9 min allowed` |
 
 Tracking-only partner: tiles read `No terms` for the first three and the fourth shows recorded minutes with no allowance line.
 
-**SLA term evaluations.** One row per scored term, expandable with the existing `<details>` disclosure and script.
+**SLA term evaluations.** One row per scored term, expandable with the existing `<details>` disclosure and script. Every row expands.
 
 | Column | Content |
 | --- | --- |
@@ -161,30 +161,20 @@ Tracking-only partner: tiles read `No terms` for the first three and the fourth 
 | Status | `StatusBadge` |
 | Target / Actual | as §6 |
 | Error budget | as §6, with `max 100%` right-aligned under the bar |
-| Window trend | sparkline and trend mark, §7.1 |
 | Projected | projected exhaustion timestamp, or `None projected` |
 | Credit | as §6 |
 
 **Credit cell.** When incurred and projected are the same non-numeric statement (for example `penalty clause, not yet entered` for both), the cell shows that statement once. Numeric pairs keep `incurred → projected`.
 
-Expanded content is today's `OutageLines`: PIR key linked to `pir_url`, start, computed end, minutes (both durations for a boundary outage), filed service, severity, merchant id, source, review line, merged groups marked, reconciliation line.
+Expanded content opens with the Window trend (§7.1) under a `Window trend` caption; it is not a table column. Below it, for a row with outages, today's `OutageLines`: PIR key linked to `pir_url`, start, computed end, minutes (both durations for a boundary outage), filed service, severity, merchant id, source, review line, merged groups marked, reconciliation line.
 
 Scored partners with outages outside their scopes get a second table, `Outside contracted scopes`, with the tracking columns from below.
 
 ### 7.1 Window trend
 
-Each row shows seven bars: six prior calendar months then the selected month. Prior bars are `muted-foreground`; the current bar takes the status colour on a scored row and `foreground` on a tracking row. A month before data coverage renders as a gap with no bar. Each bar carries a `<title>` of `April 2026: 12.0 min`. The SVG is server-rendered and sized to the row; it has `role="img"` and an `aria-label` summarising the series.
+Rendered in the expanded panel of each term and tracking row, above any outage lines. Each shows twelve bars: eleven prior calendar months then the selected month. Prior bars are `muted-foreground`; the current bar takes the status colour on a scored row and `foreground` on a tracking row. A month before data coverage renders as a gap with no bar. Each bar carries a `<title>` of `April 2026: 12.0 min`, and a three-letter month label sits under each bar. The SVG is server-rendered and stretches to the full width of the panel; it has `role="img"` and an `aria-label` summarising the series.
 
-Beside the bars, a trend mark with text:
-
-| Condition | Mark | Text |
-| --- | --- | --- |
-| fewer than `MIN_BASELINE_MONTHS` covered prior months | none | `n/a` |
-| current above the prior median | up arrow, `danger` | `above median` |
-| current equal | flat, muted | `at median` |
-| current below | down arrow, muted | `below median` |
-
-The comparison is descriptive, never evaluative (parent §9.1). The data comes from the engine, §10.
+The trend carries no median mark or text. The comparison against recent months stays in the tracking table's `Compared with recent months` column. The data comes from the engine, §10.
 
 **Coverage terms.** Cards, three across, one per scored term.
 
@@ -194,7 +184,7 @@ The comparison is descriptive, never evaluative (parent §9.1). The data comes f
 - Status sentence rendered from `StatusReason`, as today.
 - `Tickets`: PIR keys that consumed this term's downtime, newest first, each linked to its stored `pir_url` (https only, as today); a key without a URL is plain mono text. Empty: `No outages in this window.`
 
-**Recorded downtime (tracking only).** For a partner with no bound terms: a line `Tracking only. Minutes are recorded downtime; there is no target or status.`, then a table with columns Service, Minutes this window, Incidents, Window trend, Compared with recent months, expandable to the same outage lines. A partner with no terms and no recorded rows shows the sentence `No downtime recorded in this window.` instead of a table.
+**Recorded downtime (tracking only).** For a partner with no bound terms: a line `Tracking only. Minutes are recorded downtime; there is no target or status.`, then a table with columns Service, Minutes this window, Incidents, Compared with recent months. Every row expands to the Window trend (§7.1), followed by the same outage lines when it has any; the unavailable row does not expand. A partner with no terms and no recorded rows shows the sentence `No downtime recorded in this window.` instead of a table.
 
 **States.** Feed unavailable: header stays, tiles read `Unavailable`, one error row in the table, no cards. Business role: the variant in §9a. Unknown slug: 404.
 
@@ -209,13 +199,13 @@ Note under the heading: `Transitions only. The job writes a row when a status ri
 | Partner | display name, link to the partner page for that period |
 | Scope | scope title; a `tracking:<service>` id renders as `Service: Login` |
 | Month | `September 2026` |
-| Last status | `StatusBadge` for `at_risk` and `breaching`; `Chip` for `meeting`, `heads_up` (`Heads-up`), `quiet`, and any other value verbatim |
+| Last status | `StatusBadge` for `at_risk` and `breached`; `Chip` for `meeting`, `heads_up` (`Heads-up`), `quiet`, and any other value verbatim |
 | Last alerted | mono UTC timestamp, or `Never` |
 | Alerts sent | `alert_count` |
 
 Sort: `last_alerted_at` descending, nulls last. Filter: the window param; `window=all` lists every month. Default is the selected window.
 
-**Badge.** Rows in the selected window whose `last_status` is `at_risk`, `breaching`, or `heads_up`. These are situations Slack was told about that have not recovered. When the read fails the badge is `!` in `danger` and the page shows `Alert history unavailable.` in a `role="alert"` paragraph.
+**Badge.** Rows in the selected window whose `last_status` is `at_risk`, `breached`, or `heads_up`. These are situations Slack was told about that have not recovered. When the read fails the badge is `!` in `danger` and the page shows `Alert history unavailable.` in a `role="alert"` paragraph.
 
 Empty state for a month: `No alerts recorded for September 2026.`
 
@@ -244,16 +234,16 @@ The business viewer gets the Overview (§6) and the partner page (§7) rendered 
 | Header meta line | `Merchant ID 151639 · 3 terms · Contract on file` (link) | `3 terms · Monthly window` |
 | Backtest button | per existing rule | absent |
 | Tiles | §7 | §7, same four |
-| Term table | §7 columns, rows expand to outage lines | §7 columns, rows do not expand; no outage lines |
-| Window trend | §7.1 | §7.1, from `history` on the business row |
+| Term table | §7 columns, rows expand to the trend and outage lines | §7 columns, rows expand to the trend only; no outage lines |
+| Window trend | §7.1, in the expanded panel | §7.1, in the expanded panel, from `history` on the business row |
 | Projected | exhaustion timestamp | exhaustion timestamp |
 | Credit | incurred → projected | incurred → projected |
 | Coverage cards | §7 rows, clause, status sentence, tickets | §7 rows and the status sentence only. No clause, no tickets |
-| Recorded downtime (tracking only) | expandable | not expandable; comparison sentence as the business row renders it |
+| Recorded downtime (tracking only) | expands to the trend and outage lines | expands to the trend only; comparison sentence as the business row renders it |
 
 The business row's `summary` sentence is the status sentence on its cards. The technical page keeps rendering its sentence from `StatusReason` through `copy.ts`, as today.
 
-**Disclosure scope.** The only `<details>` that must never reach a business viewer is the outage disclosure (`data-outages`). The month picker in the top bar is also a `<details>` and is shared by both roles.
+**Disclosure scope.** The only `<details>` that must never reach a business viewer is the outage disclosure (`data-outages`). The month picker in the top bar is also a `<details>` and is shared by both roles, as is the row expander that holds only the trend (`data-disclosure` without `data-outages`).
 
 **Nothing is hidden by a conditional.** The business `PartnerView` is built from `BusinessRow`, which has no PIR key, URL, merchant id, severity, reviewer, clause, or reason object. A component asked to render tickets receives an empty list and renders nothing; the card's tickets block is omitted when the view carries `tickets: null`. A page-level test asserts the rendered business markup contains none of the sentinel values the payload test already guards (parent §13).
 
@@ -273,7 +263,7 @@ history: MonthHistory[]
 type MonthHistory = { month: string; usedMinutes: number | null }  // "YYYY-MM"; null before data coverage
 ```
 
-`history` is the six calendar months before the window's month, oldest first, computed with the same `attribute()` and `countDowntime()` the status uses, over the scope's services (scored) or the single service (tracking). The existing `baseline()` is rewritten to derive its median from these totals so the two cannot drift. Covered months with no outages are `0`; months before `DATA_COVERAGE_START` are `null`.
+`history` is the eleven calendar months before the window's month, oldest first, computed with the same `attribute()` and `countDowntime()` the status uses, over the scope's services (scored) or the single service (tracking). The existing `baseline()` is rewritten to derive its median from the last six of these totals so the two cannot drift. Covered months with no outages are `0`; months before `DATA_COVERAGE_START` are `null`.
 
 Actual uptime is a display derivation in `copy.ts`: `1 - usedMinutes / elapsedMinutes` while the window is open, `1 - usedMinutes / windowMinutes` once settled. When `elapsedMinutes` is 0 the figure renders as `100.000%`. Formatted to three decimals by `formatUptime`.
 
@@ -321,7 +311,7 @@ Components render a role-neutral view model and never see a feed row. The engine
 type TermView = {
   key: string
   title: string
-  status: "meeting" | "at_risk" | "breaching"
+  status: "meeting" | "at_risk" | "breached"
   target: string; actual: string; actualCaption: string | null
   allowed: string; consumed: string; remaining: string
   usedMinutes: number; allowedMinutes: number; consumedPercent: string
@@ -346,7 +336,7 @@ type PartnerView = {
   id: string; name: string
   merchantIds: string[] | null       // technical only
   terms: TermView[]; tracking: TrackingView[]
-  worst: "breaching" | "at_risk" | "meeting" | null   // null when tracking only
+  worst: "breached" | "at_risk" | "meeting" | null   // null when tracking only
   contractTerms: "add" | "view" | "draft" | "unknown" | null   // null for business
   backtest: BacktestState | null     // null for business
 }

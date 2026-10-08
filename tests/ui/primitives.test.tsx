@@ -4,8 +4,8 @@ import { Sparkline, StatusBadge, StatusDot, Tile } from "@/ui";
 
 describe("ui primitives", () => {
   it("renders a tile with label, value, and detail in token classes", () => {
-    const html = renderToStaticMarkup(<Tile label="Breaching" value="3" detail="of 3 terms" tone="danger" emphasis />);
-    expect(html).toContain("Breaching");
+    const html = renderToStaticMarkup(<Tile label="Breached" value="3" detail="of 3 terms" tone="danger" emphasis />);
+    expect(html).toContain("Breached");
     expect(html).toContain(">3<");
     expect(html).toContain("of 3 terms");
     expect(html).toContain("text-danger");
@@ -42,8 +42,8 @@ describe("ui primitives", () => {
   });
 
   it("marks a breaching dot with visible mark and sr-only label", () => {
-    const html = renderToStaticMarkup(<StatusDot tone="breaching" />);
-    expect(html).toMatch(/class="sr-only">Breaching</);
+    const html = renderToStaticMarkup(<StatusDot tone="breached" />);
+    expect(html).toMatch(/class="sr-only">Breached</);
     expect(html).toMatch(/text-danger">!</);
   });
 
@@ -71,6 +71,11 @@ describe("ui primitives", () => {
 
   it("prints a text label on warning and danger badges", () => {
     expect(renderToStaticMarkup(<StatusBadge variant="warning" label="At risk" />)).toContain("At risk");
-    expect(renderToStaticMarkup(<StatusBadge variant="danger" label="Breaching" />)).toContain("Breaching");
+    expect(renderToStaticMarkup(<StatusBadge variant="danger" label="Breached" />)).toContain("Breached");
+  });
+
+  it("paints a meeting badge with the success text and border", () => {
+    const html = renderToStaticMarkup(<StatusBadge variant="success" label="Meeting" />);
+    expect(html).toMatch(/class="[^"]*border-success[^"]*text-success[^"]*">Meeting</);
   });
 });

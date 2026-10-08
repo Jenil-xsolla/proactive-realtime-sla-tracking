@@ -1,6 +1,7 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { cookies } from "next/headers";
-import { getDatabase, listAlertState, readContractTerms, type AlertStateRow } from "@/data";
+import { getDatabase, listAlertState, readContractTerms, type AlertStateRow, type ContractTermsRow } from "@/data";
+import { DbTermsProvider } from "@/terms";
 import {
   getSlaFeed,
   getSlaHealth,
@@ -95,16 +96,22 @@ export async function loadWorkspace(
     };
   }
   const role = viewer.role === "business" ? "business" : "technical";
-  const termsIndex = role === "technical" ? await loadTermsIndex() : null;
+  // Technical reads start together. The terms rows are read once and shared by the index and the feed.
+  const termsRows = role === "technical" ? readTermsRows() : null;
+  const termsIndexRead = termsRows === null ? Promise.resolve(null) : loadTermsIndex(termsRows);
+  const alertsRead = role === "technical" ? loadAlerts() : null;
+  const unusableRead = role === "technical" && input.unusable === true ? loadUnusable(asOf, viewer) : null;
+  const sources = termsRows === null ? undefined : { terms: new DbTermsProvider(() => termsRows) };
 
   let feed;
   try {
-    feed = await getSlaFeed({ asOf, window: resolved.window, viewer });
+    feed = await getSlaFeed({ asOf, window: resolved.window, viewer, sources });
   } catch (error) {
     console.error("[sla-dashboard] feed", error);
+    const termsIndex = await termsIndexRead;
     const [alerts, backtest] =
       role === "technical"
-        ? await Promise.all([loadAlerts(), loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, null)])
+        ? await Promise.all([alertsRead, loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, null)])
         : [null, null];
     return {
       role,
@@ -135,12 +142,13 @@ export async function loadWorkspace(
     };
   }
 
+  const termsIndex = await termsIndexRead;
   const partners = buildTechnicalPartners(feed.rows, phase, resolved.key, termsIndex);
   const health = buildHealth({ health: feed.health, ingestion: feed.ingestion, invalidTerms: feed.invalidTerms });
   const [alerts, backtest, unusable] = await Promise.all([
-    loadAlerts(),
+    alertsRead ?? loadAlerts(),
     loadBacktest(pilotPartner(input.backtestPartner), asOf, termsIndex?.bound ?? null, feed.rows),
-    input.unusable === true ? loadUnusable(asOf, viewer) : Promise.resolve(null),
+    unusableRead,
   ]);
   return {
     role: "technical",
@@ -185,9 +193,9 @@ function phaseFor(windowKey: string, asOf: Date): "open" | "settled" {
  * Null when the terms table cannot be read. The dashboard then does not
  * guess Add versus View, and does not enable backtest from the table alone.
  */
-async function loadTermsIndex(): Promise<TermsIndex> {
+async function loadTermsIndex(termsRows: Promise<ContractTermsRow[]>): Promise<TermsIndex> {
   try {
-    const rows = await readContractTerms(getDatabase());
+    const rows = await termsRows;
     return {
       withTerms: new Set(rows.map((row) => row.partnerSlug)),
       bound: new Set(rows.filter((row) => row.lifecycle === "contract_bound").map((row) => row.partnerSlug)),
@@ -197,6 +205,11 @@ async function loadTermsIndex(): Promise<TermsIndex> {
     console.error("[sla-dashboard] contract terms", error);
     return null;
   }
+}
+
+/** getDatabase() throws synchronously without DATABASE_URL; this turns that into a rejection like any failed read. */
+async function readTermsRows(): Promise<ContractTermsRow[]> {
+  return readContractTerms(getDatabase());
 }
 
 function pilotPartner(value: string | undefined): string | undefined {

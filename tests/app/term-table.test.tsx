@@ -69,6 +69,22 @@ describe("term table expander", () => {
     expect(panel?.textContent).toContain("50 min total · 30 min in this window");
   });
 
+  it("shows the window trend in the expanded panel, and expands a term without outages to the trend only", () => {
+    document.body.innerHTML = renderToStaticMarkup(<TermTable partnerName="Scopely" terms={termsFor([boundaryOutage], 30)} />);
+    expect(document.querySelector("thead")?.textContent).not.toContain("Window trend");
+    const summary = document.querySelector("summary") as HTMLElement;
+    expect(summary.querySelector("svg[role='img']")).toBeNull();
+    const panel = document.getElementById(summary.getAttribute("aria-controls") ?? "");
+    expect(panel?.textContent).toContain("Window trend");
+    expect(panel?.querySelector("svg[role='img']")).not.toBeNull();
+
+    const quiet = renderToStaticMarkup(<TermTable partnerName="Scopely" terms={termsFor([], 0)} />);
+    expect(quiet).toContain("<details");
+    expect(quiet).not.toContain("data-outages");
+    expect(quiet).toContain("Window trend");
+    expect(quiet).toContain("Show trend for Scopely");
+  });
+
   it("notes overlapping minutes and reconciles the merged total once", () => {
     const merged: Outage[] = [
       { ...boundaryOutage, pirKey: "GTO-700", incidentStarted: "2026-09-05T10:00:00.000Z", minutesInWindow: 40, totalMinutes: 40, mergeGroup: "1", countedMinutes: 30 },
@@ -77,6 +93,17 @@ describe("term table expander", () => {
     const html = renderToStaticMarkup(<TermTable partnerName="Scopely" terms={termsFor(merged, 40)} />);
     expect(html).toContain("Overlapping minutes were counted once.");
     expect(html).toContain("2 outages · 40 minutes counted in this window");
+  });
+
+  it("renders a meeting status with the success border and text", () => {
+    const partner = buildTechnicalPartners(
+      [scoredRow({ status: "meeting", usedMinutes: 1 })],
+      "open",
+      "2026-09",
+      { withTerms: new Set(["scopely"]), bound: new Set(["scopely"]), draft: new Set() },
+    ).find((entry) => entry.id === "scopely");
+    const html = renderToStaticMarkup(<TermTable partnerName="Scopely" terms={partner?.terms ?? []} />);
+    expect(html).toMatch(/class="[^"]*border-success[^"]*text-success[^"]*">Meeting</);
   });
 
   it("renders the PIR key as a link only for an https ticket URL, and the severity without an em dash", () => {

@@ -2,7 +2,7 @@ import type { AlertStateRow } from "@/data";
 import type { HealthView } from "./model";
 import type { Badge } from "./nav";
 
-export const ACTIVE_ALERT_STATUSES: ReadonlySet<string> = new Set(["at_risk", "breaching", "heads_up"]);
+export const ACTIVE_ALERT_STATUSES: ReadonlySet<string> = new Set(["at_risk", "breached", "heads_up"]);
 
 type HealthInput = HealthView | { status: "error" } | null;
 type AlertsInput = AlertStateRow[] | { status: "error" } | null;

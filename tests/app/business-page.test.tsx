@@ -9,8 +9,8 @@ import { buildBusinessPartners } from "@/app/dashboard/view";
 import { Shell } from "@/app/shell/shell";
 import { WINDOW_KEY, evaluateBusinessFeed, scoredOutage, trackingOutage } from "../support/business-feed";
 
-// The outage expander is the only <details> that must never reach a business viewer; the month picker is one by design.
-const SENTINELS = ["GTO-", "151639", "503608", "ada", "L1", "FIXTURE", "/alerts", "/health", "/terms", "<details data-outages"];
+// The outage expander is the only <details> that must never reach a business viewer; the month picker and the trend expander are by design.
+const SENTINELS = ["GTO-", "151639", "503608", "ada", "L1", "FIXTURE", "/alerts", "/health", "/terms", "data-outages"];
 
 describe("business role", () => {
   it("renders the overview and partner page from a real business evaluation with nothing engineer-side in the markup", async () => {

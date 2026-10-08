@@ -13,7 +13,7 @@ import { buildTrend } from "./view";
 export function PartnerPageView({ view, backtest }: { view: Model; backtest: BacktestPanelModel | null }) {
   const unavailableRow = {
     key: `${view.id}:unavailable`, service: UNAVAILABLE, minutes: UNAVAILABLE, incidents: UNAVAILABLE, usedMinutes: 0, outageCount: 0,
-    comparison: ROW_UNAVAILABLE, trend: buildTrend([], view.windowKey, 0, null), outages: null, reconciliation: "",
+    comparison: ROW_UNAVAILABLE, trend: buildTrend([], view.windowKey, 0), outages: null, reconciliation: "",
   };
   return (
     <>

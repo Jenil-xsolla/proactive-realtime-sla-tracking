@@ -1,13 +1,11 @@
 import { Sparkline } from "@/ui";
 import type { Status, TrendView } from "./view";
 
-const tones = { meeting: "neutral", at_risk: "warning", breaching: "danger" } as const;
-const marks = { up: "↑", down: "↓", flat: "→" } as const;
+const tones = { meeting: "neutral", at_risk: "warning", breached: "danger" } as const;
 
 export function TrendSparkline({ trend, status }: { trend: TrendView; status: Status | null }) {
-  const markTone = trend.mark === "up" ? "text-danger" : "text-muted-foreground";
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+    <div className="flex w-full flex-col gap-1">
       <Sparkline
         label={trend.summary}
         currentTone={status === null ? "neutral" : tones[status]}
@@ -17,14 +15,20 @@ export function TrendSparkline({ trend, status }: { trend: TrendView; status: St
           current: bar.current,
         }))}
       />
-      <span className={`font-mono text-xs leading-tight ${markTone}`}>
-        {trend.mark === "none" ? null : (
-          <>
-            <span aria-hidden="true">{marks[trend.mark]}</span>{" "}
-          </>
-        )}
-        {trend.text}
-      </span>
-    </span>
+      <div aria-hidden="true" className="grid font-mono text-xs text-muted-foreground" style={{ gridTemplateColumns: `repeat(${trend.bars.length}, minmax(0, 1fr))` }}>
+        {trend.bars.map((bar) => (
+          <span key={bar.month} className={`text-center ${bar.current ? "text-foreground" : ""}`}>{bar.label.slice(0, 3)}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function WindowTrend({ trend, status }: { trend: TrendView; status: Status | null }) {
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Window trend</span>
+      <TrendSparkline trend={trend} status={status} />
+    </div>
   );
 }

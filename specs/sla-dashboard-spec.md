@@ -481,7 +481,7 @@ type Evaluation =
 type MonthHistory = { month: string; usedMinutes: number | null }  // "YYYY-MM"
 ```
 
-`MonthHistory` covers the six calendar months before the window's month, oldest first. `usedMinutes` is `null` for a month before data coverage began (2026-01-01): unknown, not clean, and never a zero. A covered month with no outages is `0`.
+`MonthHistory` covers the eleven calendar months before the window's month, oldest first; the baseline comparison uses only the last six. `usedMinutes` is `null` for a month before data coverage began (2026-01-01): unknown, not clean, and never a zero. A covered month with no outages is `0`.
 
 The discriminated union is deliberate. A tracking-only result has no `status` field — not null, not `"N/A"`. The UI cannot render a fabricated status because there is nothing to bind to, and TypeScript forces both cases to be handled.
 

@@ -2,7 +2,8 @@ import { BudgetBar, StatusBadge, Table, TableBody, TableHead, TableHeaderCell } 
 import { NO_ATTENTION, statusLabel } from "./copy";
 import type { AttentionRow } from "./overview";
 
-export const badgeVariant = { meeting: "neutral", at_risk: "warning", breaching: "danger" } as const;
+export const badgeVariant = { meeting: "success", at_risk: "warning", breached: "danger" } as const;
+export const budgetTone = { meeting: "neutral", at_risk: "warning", breached: "danger" } as const;
 
 export function AttentionTable({ rows, failure }: { rows: readonly AttentionRow[]; failure: string | null }) {
   if (failure !== null) {
@@ -12,7 +13,7 @@ export function AttentionTable({ rows, failure }: { rows: readonly AttentionRow[
     return <p className="text-sm text-muted-foreground">{NO_ATTENTION}</p>;
   }
   return (
-    <Table caption="Terms at risk or breaching">
+    <Table caption="Terms at risk or breached">
       <TableHead>
         <tr className="border-b border-border">
           <TableHeaderCell>Partner · scope</TableHeaderCell>
@@ -31,11 +32,11 @@ export function AttentionTable({ rows, failure }: { rows: readonly AttentionRow[
             </td>
             <td className="px-3 py-3 align-top"><StatusBadge variant={badgeVariant[row.term.status]} label={statusLabel(row.term.status)} /></td>
             <td className="px-3 py-3 text-right align-top font-mono text-sm tabular-nums">
-              {row.term.target} / <span className={row.term.status === "breaching" ? "text-danger" : "text-warning"}>{row.term.actual}</span>
+              {row.term.target} / <span className={row.term.status === "breached" ? "text-danger" : "text-warning"}>{row.term.actual}</span>
               {row.term.actualCaption === null ? null : <span className="block text-xs text-muted-foreground">{row.term.actualCaption}</span>}
             </td>
             <td className="px-3 py-3 align-top">
-              <BudgetBar usedMinutes={row.term.usedMinutes} allowedMinutes={row.term.allowedMinutes} tone={badgeVariant[row.term.status]} />
+              <BudgetBar usedMinutes={row.term.usedMinutes} allowedMinutes={row.term.allowedMinutes} tone={budgetTone[row.term.status]} />
               <span className="mt-1 block font-mono text-xs text-muted-foreground">{row.term.consumedPercent}</span>
             </td>
             <td className="px-3 py-3 text-right align-top font-mono text-sm tabular-nums">{row.term.credit.text}</td>

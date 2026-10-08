@@ -3,7 +3,7 @@ import { durationMinutes, fromMs, type Interval } from "./intervals";
 import type { StatusReason } from "./types";
 
 export type Classification = {
-  status: "meeting" | "at_risk" | "breaching";
+  status: "meeting" | "at_risk" | "breached";
   remainingMinutes: number;
   projectedExhaustion: Date | null;
   reason: StatusReason;
@@ -40,7 +40,7 @@ export function classify(input: {
     }
   }
 
-  const status = breaching ? "breaching" : fired.length > 0 ? "at_risk" : "meeting";
+  const status = breaching ? "breached" : fired.length > 0 ? "at_risk" : "meeting";
   const rule = breaching ? "breaching" : (fired[0] ?? "meeting");
 
   return {

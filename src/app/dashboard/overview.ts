@@ -2,12 +2,12 @@ import { ADD_CONTRACT_TERMS, DRAFT_TERMS, NO_TARGET_NOTE, SETTLED_NOTE, UNAVAILA
 import { withWindow } from "./nav";
 import type { PartnerView, Status, TermView } from "./view";
 
-export type OverviewTile = { label: string; value: string; detail: string | null; tone: "neutral" | "warning" | "danger" | "muted"; emphasis: boolean };
+export type OverviewTile = { label: string; value: string; detail: string | null; tone: "neutral" | "warning" | "danger" | "muted"; labelTone?: "success" | "warning" | "danger"; emphasis: boolean };
 export type AttentionRow = { partnerId: string; partnerName: string; href: string; term: TermView };
 export type RailCard = { id: string; name: string; href: string; worst: Status | null; line: string; termsLink: { label: string; href: string } | null; unavailable: boolean };
 export type OverviewView = { summary: string; settledNote: string | null; failure: string | null; tiles: OverviewTile[]; attention: AttentionRow[]; rail: RailCard[] };
 
-const RANK: Record<Status, number> = { meeting: 0, at_risk: 1, breaching: 2 };
+const RANK: Record<Status, number> = { meeting: 0, at_risk: 1, breached: 2 };
 
 export function termsLinkFor(partner: PartnerView): { label: string; href: string } | null {
   const href = `/partners/${partner.id}/terms`;
@@ -51,20 +51,20 @@ export function buildOverview(input: {
   const scoredPartners = input.partners.filter((partner) => partner.terms.length > 0).length;
   const trackingOnly = input.partners.filter((partner) => partner.terms.length === 0).length;
   const count = (status: Status) => terms.filter((term) => term.status === status).length;
-  const breaching = count("breaching");
+  const breaching = count("breached");
   const atRisk = count("at_risk");
 
   const tiles: OverviewTile[] = input.failure !== null
     ? [
-        { label: "Breaching", value: UNAVAILABLE, detail: null, tone: "muted", emphasis: false },
-        { label: "At risk", value: UNAVAILABLE, detail: null, tone: "muted", emphasis: false },
-        { label: "Meeting", value: UNAVAILABLE, detail: null, tone: "muted", emphasis: false },
+        { label: "Breached", value: UNAVAILABLE, detail: null, tone: "muted", labelTone: "danger", emphasis: false },
+        { label: "At risk", value: UNAVAILABLE, detail: null, tone: "muted", labelTone: "warning", emphasis: false },
+        { label: "Meeting", value: UNAVAILABLE, detail: null, tone: "muted", labelTone: "success", emphasis: false },
         { label: "Tracking only", value: UNAVAILABLE, detail: null, tone: "muted", emphasis: false },
       ]
     : [
-        { label: "Breaching", value: String(breaching), detail: null, tone: breaching > 0 ? "danger" : "neutral", emphasis: breaching > 0 },
-        { label: "At risk", value: String(atRisk), detail: null, tone: atRisk > 0 ? "warning" : "neutral", emphasis: false },
-        { label: "Meeting", value: String(count("meeting")), detail: null, tone: "neutral", emphasis: false },
+        { label: "Breached", value: String(breaching), detail: null, tone: breaching > 0 ? "danger" : "neutral", labelTone: "danger", emphasis: breaching > 0 },
+        { label: "At risk", value: String(atRisk), detail: null, tone: atRisk > 0 ? "warning" : "neutral", labelTone: "warning", emphasis: false },
+        { label: "Meeting", value: String(count("meeting")), detail: null, tone: "neutral", labelTone: "success", emphasis: false },
         { label: "Tracking only", value: String(trackingOnly), detail: NO_TARGET_NOTE, tone: "muted", emphasis: false },
       ];
 

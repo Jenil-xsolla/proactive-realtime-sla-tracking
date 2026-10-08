@@ -13,7 +13,7 @@ const months = [
 ];
 const at = (iso: string) => new Date(iso);
 const rows = [
-  { partnerSlug: "scopely", scopeId: "payments", period: "2026-09", lastStatus: "breaching", lastAlertedAt: at("2026-09-20T01:00:00Z"), alertCount: 2, updatedAt: at("2026-09-20T01:00:00Z") },
+  { partnerSlug: "scopely", scopeId: "payments", period: "2026-09", lastStatus: "breached", lastAlertedAt: at("2026-09-20T01:00:00Z"), alertCount: 2, updatedAt: at("2026-09-20T01:00:00Z") },
   { partnerSlug: "kabam", scopeId: "tracking:login", period: "2026-09", lastStatus: "heads_up", lastAlertedAt: at("2026-09-10T13:00:00Z"), alertCount: 1, updatedAt: at("2026-09-10T13:00:00Z") },
   { partnerSlug: "niantic", scopeId: "payments", period: "2026-09", lastStatus: "meeting", lastAlertedAt: null, alertCount: 0, updatedAt: at("2026-09-02T00:00:00Z") },
   { partnerSlug: "niantic", scopeId: "payments", period: "2026-08", lastStatus: "at_risk", lastAlertedAt: at("2026-08-15T01:00:00Z"), alertCount: 1, updatedAt: at("2026-08-15T01:00:00Z") },
@@ -25,7 +25,7 @@ describe("alerts page", () => {
     const view = buildAlertsView({ alerts: rows, filterKey: "2026-09", months, partners });
     if (view.state !== "ok") throw new Error("expected ok");
     expect(view.rows.map((row) => `${row.partner}:${row.scope}:${row.status}:${row.lastAlerted}`)).toEqual([
-      "Scopely:Payments:Breaching:2026-09-20 01:00:00 UTC",
+      "Scopely:Payments:Breached:2026-09-20 01:00:00 UTC",
       "Kabam:Service: Login:Heads-up:2026-09-10 13:00:00 UTC",
       "Niantic:Payments:Meeting:Never",
     ]);
@@ -34,7 +34,7 @@ describe("alerts page", () => {
     expect(alertsBadge(rows, "2026-09")).toEqual({ count: 2 });
     const html = renderToStaticMarkup(<AlertsPage view={view} />);
     expect(html).toContain(ALERTS_NOTE);
-    expect(html).toContain("Breaching");
+    expect(html).toContain("Breached");
     expect(html).not.toContain("—");
   });
 
@@ -42,7 +42,7 @@ describe("alerts page", () => {
     const view = buildAlertsView({ alerts: rows, filterKey: "2026-09", months, partners });
     const html = renderToStaticMarkup(<AlertsPage view={view} />);
     const span = (label: string) => html.match(new RegExp(`<span class="[^"]*">${label}</span>`))?.[0] ?? "";
-    expect(span("Breaching")).toContain("text-danger");
+    expect(span("Breached")).toContain("text-danger");
     const headsUp = span("Heads-up");
     expect(headsUp).not.toBe("");
     expect(headsUp).not.toContain("text-danger");

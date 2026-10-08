@@ -29,7 +29,6 @@ import {
   statusExplanation,
   ticketHref,
   tierDistanceText,
-  trendText,
   truncate,
 } from "@/app/dashboard/copy";
 
@@ -187,15 +186,11 @@ describe("dashboard copy", () => {
     expect(formatUptime(0.9976)).toBe("99.760%");
   });
 
-  it("writes consumed, down, credit, and trend text in product form", () => {
+  it("writes consumed, down, and credit text in product form", () => {
     expect(consumedText(76, 21.6)).toBe("351.9% consumed");
     expect(consumedText(5, 0)).toBe("Allowance is zero");
     expect(downLine(76, 21.6)).toBe("76.0 / 21.6 min down");
     expect(creditText("0%", "5%")).toBe("0% → 5%");
-    expect(trendText("above")).toEqual({ mark: "up", text: "above median" });
-    expect(trendText("below")).toEqual({ mark: "down", text: "below median" });
-    expect(trendText("equal")).toEqual({ mark: "flat", text: "at median" });
-    expect(trendText(null)).toEqual({ mark: "none", text: "n/a" });
   });
 
   it("labels alert scopes and statuses", () => {

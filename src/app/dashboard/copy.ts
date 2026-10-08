@@ -29,7 +29,7 @@ export const BACKTEST_FAILED =
 export const BACKTEST_NO_EXPOSURE = "No exposure";
 
 export const BACKTEST_COUNT_NOTE =
-  "Trend and level each count on a step where that clause fired. Breaching and meeting each count alone.";
+  "Trend and level each count on a step where that clause fired. Breached and meeting each count alone.";
 
 export const CLAUSE_NOT_RECORDED = "Clause not recorded";
 
@@ -157,12 +157,12 @@ export function formatPercent(fraction: number): string {
   return `${text}%`;
 }
 
-export function statusLabel(status: "meeting" | "at_risk" | "breaching"): string {
+export function statusLabel(status: "meeting" | "at_risk" | "breached"): string {
   if (status === "at_risk") {
     return "At risk";
   }
-  if (status === "breaching") {
-    return "Breaching";
+  if (status === "breached") {
+    return "Breached";
   }
   return "Meeting";
 }
@@ -343,7 +343,7 @@ export const TRACKING_ONLY_LABEL = "Tracking only";
 export const TRACKING_ONLY_NOTE =
   "Tracking only. Minutes are recorded downtime; there is no target or status.";
 export const NO_TARGET_NOTE = "No target, no status";
-export const NO_ATTENTION = "No term is at risk or breaching in this window.";
+export const NO_ATTENTION = "No term is at risk or breached in this window.";
 export const NO_TICKETS = "No outages in this window.";
 export const DRAFT_TERMS = "Draft terms, not scoring";
 export const CONTRACT_ON_FILE = "Contract on file";
@@ -356,8 +356,6 @@ export const ALERTS_UNAVAILABLE = "Alert history unavailable.";
 export const ENGINEER_VIEW = "Engineer view";
 export const BUSINESS_VIEW = "Business view";
 export const NEVER_ALERTED = "Never";
-export const TREND_NA = "n/a";
-
 /** Uptime with three decimals, as contracts write it. 0.9995 is 99.950%. */
 export function formatUptime(fraction: number): string {
   return `${(Math.round(fraction * 100_000) / 1000).toFixed(3)}%`;
@@ -397,15 +395,6 @@ export function creditText(incurred: string, projected: string): string {
   return `${incurred} → ${projected}`;
 }
 
-export function trendText(
-  versusMedian: "above" | "equal" | "below" | null,
-): { mark: "up" | "down" | "flat" | "none"; text: string } {
-  if (versusMedian === "above") return { mark: "up", text: "above median" };
-  if (versusMedian === "below") return { mark: "down", text: "below median" };
-  if (versusMedian === "equal") return { mark: "flat", text: "at median" };
-  return { mark: "none", text: TREND_NA };
-}
-
 export function summaryLine(terms: number, partners: number, trackingOnly: number): string {
   const head = `Monitoring ${terms} SLA ${terms === 1 ? "term" : "terms"} across ${partners} ${partners === 1 ? "partner" : "partners"}`;
   if (trackingOnly === 0) {
@@ -441,7 +430,7 @@ export function alertScopeLabel(scopeId: string, title: (scopeId: string) => str
 export function alertStatusLabel(status: string): string {
   if (status === "heads_up") return "Heads-up";
   if (status === "quiet") return "Quiet";
-  if (status === "meeting" || status === "at_risk" || status === "breaching")
+  if (status === "meeting" || status === "at_risk" || status === "breached")
     return statusLabel(status);
   return status;
 }

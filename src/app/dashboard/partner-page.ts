@@ -32,7 +32,7 @@ export function buildPartnerPage(input: {
 }): PartnerPageView {
   const { partner } = input;
   const atRisk = partner.terms.filter((term) => term.status !== "meeting").length;
-  const breaching = partner.terms.filter((term) => term.status === "breaching").length;
+  const breaching = partner.terms.filter((term) => term.status === "breached").length;
   const used = partner.terms.reduce((sum, term) => sum + term.usedMinutes, 0);
   const allowed = partner.terms.reduce((sum, term) => sum + term.allowedMinutes, 0);
   const recorded = partner.tracking.reduce((sum, row) => sum + row.usedMinutes, 0);
@@ -44,11 +44,11 @@ export function buildPartnerPage(input: {
   const instances = ticketKeys.size;
 
   const tiles: OverviewTile[] = input.failure !== null
-    ? ["Covered services", "At risk", "Breaching", "Downtime this window"].map((label) => ({ label, value: UNAVAILABLE, detail: null, tone: "muted", emphasis: false }))
+    ? ["Covered services", "At risk", "Breached", "Downtime this window"].map((label) => ({ label, value: UNAVAILABLE, detail: null, tone: "muted", emphasis: false }))
     : [
         { label: "Covered services", value: noTerms ? NO_TERMS : String(partner.terms.length), detail: noTerms || !hasTickets ? null : `${instances} outage ${instances === 1 ? "instance" : "instances"}`, tone: noTerms ? "muted" : "neutral", emphasis: false },
         { label: "At risk", value: noTerms ? NO_TERMS : `${atRisk} / ${partner.terms.length}`, detail: null, tone: atRisk > 0 ? "warning" : noTerms ? "muted" : "neutral", emphasis: false },
-        { label: "Breaching", value: noTerms ? NO_TERMS : String(breaching), detail: null, tone: breaching > 0 ? "danger" : noTerms ? "muted" : "neutral", emphasis: breaching > 0 },
+        { label: "Breached", value: noTerms ? NO_TERMS : String(breaching), detail: null, tone: breaching > 0 ? "danger" : noTerms ? "muted" : "neutral", emphasis: breaching > 0 },
         { label: "Downtime this window", value: formatMinutes(noTerms ? recorded : used), detail: noTerms ? null : `of ${allowed.toFixed(1)} min allowed`, tone: "neutral", emphasis: false },
       ];
 

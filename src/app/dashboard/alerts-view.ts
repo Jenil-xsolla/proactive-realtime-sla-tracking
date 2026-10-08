@@ -53,8 +53,8 @@ export function buildAlertsView(input: {
       scope: alertScopeLabel(row.scopeId, (scopeId) => titles.get(`${row.partnerSlug}:${scopeId}`) ?? serviceLabel(scopeId)),
       month: monthTitle(row.period),
       status: alertStatusLabel(row.lastStatus),
-      statusKind: row.lastStatus === "at_risk" || row.lastStatus === "breaching" ? "badge" : "chip",
-      badgeVariant: row.lastStatus === "breaching" ? "danger" : "warning",
+      statusKind: row.lastStatus === "at_risk" || row.lastStatus === "breached" ? "badge" : "chip",
+      badgeVariant: row.lastStatus === "breached" ? "danger" : "warning",
       lastAlerted: row.lastAlertedAt === null ? NEVER_ALERTED : formatUtcTimestamp(row.lastAlertedAt.toISOString()),
       alerts: String(row.alertCount),
     }) satisfies AlertRowView);

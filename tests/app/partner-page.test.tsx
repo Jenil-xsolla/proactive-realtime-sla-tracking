@@ -24,7 +24,7 @@ describe("partner page", () => {
     expect(view.meta).toEqual(["Merchant ID 151639", "1 term"]);
     expect(view.termsLink).toEqual({ label: CONTRACT_ON_FILE, href: "/partners/scopely/terms" });
     expect(view.tiles.map((tile) => `${tile.label}=${tile.value}`)).toEqual([
-      "Covered services=1", "At risk=1 / 1", "Breaching=1", "Downtime this window=76 min",
+      "Covered services=1", "At risk=1 / 1", "Breached=1", "Downtime this window=76 min",
     ]);
     expect(view.tiles[0]?.detail).toBe("2 outage instances");
     expect(view.tiles[3]?.detail).toBe("of 21.6 min allowed");
@@ -56,19 +56,20 @@ describe("partner page", () => {
     expect(html).toContain("Compared with recent months");
   });
 
-  it("renders the business variant without merchant id, backtest, tickets, clause, or expanders", () => {
+  it("renders the business variant without merchant id, backtest, tickets, clause, or outage expanders", () => {
     const partner = buildBusinessPartners([businessScoredRow()], "open", "2026-09").find((entry) => entry.id === "scopely");
     const view = buildPartnerPage({ partner: partner!, phase: "open", windowKey: "2026-09", failure: null, role: "business" });
     expect(view.meta).toEqual(["1 term", "Monthly window"]);
     expect(view.backtest).toBeNull();
     expect(view.termsLink).toBeNull();
     expect(view.tiles.map((tile) => `${tile.label}=${tile.value}`)).toEqual([
-      "Covered services=1", "At risk=1 / 1", "Breaching=0", "Downtime this window=18.4 min",
+      "Covered services=1", "At risk=1 / 1", "Breached=0", "Downtime this window=18.4 min",
     ]);
     expect(view.tiles[0]?.detail).toBeNull();
     const html = renderToStaticMarkup(<PartnerPageView view={view} backtest={null} />);
     expect(html).not.toContain("151639");
-    expect(html).not.toContain("<details");
+    expect(html).not.toContain("data-outages");
+    expect(html).toContain("Window trend");
     expect(html).not.toContain("Tickets");
     expect(html).not.toContain("Clause");
     expect(html).toContain("99.915%");
@@ -88,7 +89,7 @@ describe("partner page", () => {
     expect(html).not.toContain("UPTIME · MONTHLY");
     expect(html).not.toContain("<details");
     const header = html.slice(0, html.indexOf("</header>"));
-    for (const text of ["Tracking only", "Meeting", "At risk", "Breaching"]) expect(header).not.toContain(text);
+    for (const text of ["Tracking only", "Meeting", "At risk", "Breached"]) expect(header).not.toContain(text);
   });
 
   it("says no downtime was recorded, with no table, for a partner without terms or tracking rows", () => {
@@ -172,7 +173,7 @@ describe("partner page", () => {
     const windowStart = "2026-09-15T00:00:00.000Z";
     const view = buildPartnerPage({
       partner: technical([scoredRow({
-        status: "breaching",
+        status: "breached",
         nextTierStartsAfterMinutes: 216,
         windowStart,
         penalty: {
@@ -184,7 +185,7 @@ describe("partner page", () => {
     });
     const html = renderToStaticMarkup(<PartnerPageView view={view} backtest={null} />);
     const cards = html.slice(html.indexOf("Coverage terms"));
-    expect(cards).toContain("Breaching");
+    expect(cards).toContain("Breached");
     expect(cards).toMatch(new RegExp(`Next tier</dt><dd[^>]*>${tierDistanceText(76, 216)}</dd>`));
     expect(cards).toContain(tierDistanceText(76, 216));
     expect(proratedWindowNote(windowStart)).not.toBeNull();

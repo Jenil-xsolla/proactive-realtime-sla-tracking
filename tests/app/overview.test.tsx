@@ -16,7 +16,7 @@ describe("overview", () => {
     const view = buildOverview({
       partners: partnersWith([
         scoredRow({ partner: "niantic", scopeId: "payments", status: "at_risk", usedMinutes: 18, penalty: { incurred: { kind: "none", statement: "no penalty clause" }, projected: { kind: "unknown", statement: "penalty clause, not yet entered" } } }),
-        scoredRow({ partner: "scopely", scopeId: "payments", status: "breaching", usedMinutes: 76 }),
+        scoredRow({ partner: "scopely", scopeId: "payments", status: "breached", usedMinutes: 76 }),
         scoredRow({ partner: "scopely", scopeId: "login", status: "meeting", usedMinutes: 1, services: ["login"] }),
       ]),
       phase: "settled",
@@ -25,9 +25,9 @@ describe("overview", () => {
       role: "technical",
     });
     expect(view.summary).toBe("Monitoring 3 SLA terms across 2 partners · 9 partners tracking only.");
-    expect(view.tiles.map((tile) => `${tile.label}=${tile.value}`)).toEqual(["Breaching=1", "At risk=1", "Meeting=1", "Tracking only=9"]);
+    expect(view.tiles.map((tile) => `${tile.label}=${tile.value}`)).toEqual(["Breached=1", "At risk=1", "Meeting=1", "Tracking only=9"]);
     expect(view.tiles[0]?.emphasis).toBe(true);
-    expect(view.attention.map((row) => `${row.partnerId}:${row.term.status}`)).toEqual(["scopely:breaching", "niantic:at_risk"]);
+    expect(view.attention.map((row) => `${row.partnerId}:${row.term.status}`)).toEqual(["scopely:breached", "niantic:at_risk"]);
     expect(view.attention[1]?.term.credit.text).toBe("no penalty clause → penalty clause, not yet entered");
     expect(view.rail[0]?.id).toBe("scopely");
     expect(view.rail[1]?.id).toBe("niantic");
@@ -38,6 +38,10 @@ describe("overview", () => {
     expect(view.rail.find((card) => card.id === "kabam")?.line).toBe("0 services · 0 outages · 0.0 min recorded");
 
     const html = renderToStaticMarkup(<OverviewPage view={view} />);
+    expect(html).toMatch(/class="[^"]*text-danger[^"]*">Breached</);
+    expect(html).toMatch(/class="[^"]*text-warning[^"]*">At risk</);
+    expect(html).toMatch(/class="[^"]*text-success[^"]*">Meeting</);
+    expect(html).toMatch(/class="[^"]*border-danger[^"]*"/);
     expect(html).toContain("99.950% / ");
     expect(html).toContain("351.9% consumed");
     expect(html).toContain('href="/partners/scopely?window=2026-09"');

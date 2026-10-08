@@ -2,7 +2,7 @@ import type { PartnerView } from "./view";
 
 export type Badge = { count: number } | { status: "error" } | null;
 export type NavActive = { kind: "overview" } | { kind: "alerts" } | { kind: "health" } | { kind: "partner"; id: string };
-export type NavTone = "breaching" | "at_risk" | "meeting" | "tracking" | "unknown";
+export type NavTone = "breached" | "at_risk" | "meeting" | "tracking" | "unknown";
 
 export type NavModel = {
   windowKey: string;

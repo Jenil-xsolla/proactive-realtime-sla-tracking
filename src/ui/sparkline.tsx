@@ -4,13 +4,14 @@ const fills = {
   danger: "fill-danger",
 } as const;
 
-const WIDTH = 84;
-const HEIGHT = 24;
+const SLOT = 10;
 const GAP = 2;
+const HEIGHT = 48;
 
 /**
- * Thin bars, one per month, 2px apart. A null value draws nothing: a gap is
- * unknown, not zero. A zero draws a 1px baseline tick so it reads as "clean".
+ * Bars, one per month in equal slots, stretched to the container's width. A
+ * null value draws nothing: a gap is unknown, not zero. A zero draws a 1px
+ * baseline tick so it reads as "clean".
  */
 export function Sparkline({
   bars,
@@ -21,11 +22,10 @@ export function Sparkline({
   currentTone: keyof typeof fills;
   label: string;
 }) {
-  const count = Math.max(bars.length, 1);
-  const barWidth = (WIDTH - GAP * (count - 1)) / count;
+  const width = Math.max(bars.length, 1) * SLOT;
   const max = Math.max(1, ...bars.map((bar) => bar.value ?? 0));
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width={WIDTH} height={HEIGHT} role="img" aria-label={label} className="shrink-0">
+    <svg viewBox={`0 0 ${width} ${HEIGHT}`} width="100%" height={HEIGHT} preserveAspectRatio="none" role="img" aria-label={label} className="block">
       {bars.map((bar, index) => {
         if (bar.value === null) {
           return null;
@@ -34,11 +34,10 @@ export function Sparkline({
         return (
           <rect
             key={index}
-            x={index * (barWidth + GAP)}
+            x={index * SLOT + GAP / 2}
             y={HEIGHT - height}
-            width={barWidth}
+            width={SLOT - GAP}
             height={height}
-            rx={1}
             className={bar.current ? fills[currentTone] : "fill-muted-foreground"}
           >
             <title>{bar.title}</title>

@@ -1,12 +1,12 @@
 const styles = {
-  breaching: { dot: "bg-danger border-danger", text: "Breaching", mark: "!", markTone: "text-danger" },
+  breached: { dot: "bg-danger border-danger", text: "Breached", mark: "!", markTone: "text-danger" },
   at_risk: { dot: "bg-warning border-warning", text: "At risk", mark: "!", markTone: "text-warning" },
   meeting: { dot: "bg-transparent border-foreground", text: "Meeting", mark: null, markTone: null },
   tracking: { dot: "bg-transparent border-muted-foreground", text: "Tracking only", mark: null, markTone: null },
 } as const;
 
 /** The dot carries a visually hidden label and a visible mark for status. */
-export function StatusDot({ tone }: { tone: "breaching" | "at_risk" | "meeting" | "tracking" }) {
+export function StatusDot({ tone }: { tone: "breached" | "at_risk" | "meeting" | "tracking" }) {
   const style = styles[tone];
   return (
     <span className="inline-flex items-center gap-2">

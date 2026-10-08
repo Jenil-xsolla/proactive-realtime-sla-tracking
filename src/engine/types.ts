@@ -186,7 +186,7 @@ export type Evaluation<P extends string = string, S extends string = string> =
       usedMinutes: number;
       remainingMinutes: number;
       burnRate: number;
-      status: "meeting" | "at_risk" | "breaching";
+      status: "meeting" | "at_risk" | "breached";
       projectedExhaustion: Date | null;
       /** First instant this scope is scored in the requested window. */
       windowStart: Date;

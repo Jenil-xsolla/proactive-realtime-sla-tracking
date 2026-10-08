@@ -19,13 +19,12 @@ import {
   reconciliationText,
   statusExplanation,
   tierDistanceText,
-  trendText,
 } from "./copy";
 import { toOutageViews, type OutageView } from "./outage-view";
 
-export type Status = "meeting" | "at_risk" | "breaching";
+export type Status = "meeting" | "at_risk" | "breached";
 export type TrendBar = { month: string; label: string; minutes: number | null; current: boolean };
-export type TrendView = { bars: TrendBar[]; mark: "up" | "down" | "flat" | "none"; text: string; summary: string };
+export type TrendView = { bars: TrendBar[]; summary: string };
 export type TicketView = { key: string; href: string | null };
 
 export type TermView = {
@@ -91,7 +90,7 @@ export type TermsIndex = {
   draft: ReadonlySet<string>;
 } | null;
 
-const RANK: Record<Status, number> = { meeting: 0, at_risk: 1, breaching: 2 };
+const RANK: Record<Status, number> = { meeting: 0, at_risk: 1, breached: 2 };
 
 export function worstStatus(statuses: readonly Status[]): Status | null {
   let worst: Status | null = null;
@@ -101,12 +100,7 @@ export function worstStatus(statuses: readonly Status[]): Status | null {
   return worst;
 }
 
-export function buildTrend(
-  history: readonly MonthHistory[],
-  windowKey: string,
-  usedMinutes: number,
-  versusMedian: "above" | "equal" | "below" | null,
-): TrendView {
+export function buildTrend(history: readonly MonthHistory[], windowKey: string, usedMinutes: number): TrendView {
   const bars: TrendBar[] = history.map((entry) => ({
     month: entry.month,
     label: monthTitle(entry.month),
@@ -114,11 +108,10 @@ export function buildTrend(
     current: false,
   }));
   bars.push({ month: windowKey, label: monthTitle(windowKey), minutes: usedMinutes, current: true });
-  const text = trendText(versusMedian);
   const summary = bars
     .map((bar) => `${bar.label}: ${bar.minutes === null ? "no data" : `${bar.minutes.toFixed(1)} min`}`)
     .join("; ");
-  return { bars, mark: text.mark, text: text.text, summary };
+  return { bars, summary };
 }
 
 function contractTermsState(id: string, index: TermsIndex): ContractTermsState {
@@ -184,12 +177,7 @@ function technicalTerm(
     allowedMinutes: row.allowedMinutes,
     consumedPercent: consumedText(row.usedMinutes, row.allowedMinutes),
     downLine: downLine(row.usedMinutes, row.allowedMinutes),
-    trend: buildTrend(
-      row.history,
-      windowKey,
-      row.usedMinutes,
-      row.comparison.kind === "compared" ? row.comparison.versusMedian : null,
-    ),
+    trend: buildTrend(row.history, windowKey, row.usedMinutes),
     exhaustion: row.projectedExhaustion === null ? EXHAUSTION_NONE : formatUtcTimestamp(row.projectedExhaustion),
     credit: { incurred, projected, text: creditSummary(incurred, projected, row.penalty.incurred.kind === "credit") },
     sentence: statusExplanation(row.reason),
@@ -212,12 +200,7 @@ function technicalTracking(row: Extract<TechnicalRow, { kind: "tracking_only" }>
     usedMinutes: row.usedMinutes,
     outageCount: row.outages.length,
     comparison: comparisonText(row.comparison),
-    trend: buildTrend(
-      row.history,
-      windowKey,
-      row.usedMinutes,
-      row.comparison.kind === "compared" ? row.comparison.versusMedian : null,
-    ),
+    trend: buildTrend(row.history, windowKey, row.usedMinutes),
     outages,
     reconciliation: outages.length === 0 ? "" : reconciliationText(outages),
   };
@@ -249,7 +232,7 @@ function businessTerm(
     allowedMinutes: allowed,
     consumedPercent: consumedText(used, allowed),
     downLine: downLine(used, allowed),
-    trend: buildTrend(row.history, windowKey, used, row.versusMedian),
+    trend: buildTrend(row.history, windowKey, used),
     exhaustion: row.projectedExhaustion === null ? EXHAUSTION_NONE : formatUtcTimestamp(row.projectedExhaustion),
     credit: { incurred, projected, text: creditSummary(incurred, projected, row.creditPercentage.incurred.kind === "percent") },
     sentence: row.summary,
@@ -271,7 +254,7 @@ function businessTracking(row: Extract<BusinessRow, { kind: "tracking_only" }>, 
     usedMinutes: row.usedMinutes,
     outageCount: row.incidentCount,
     comparison: row.comparison,
-    trend: buildTrend(row.history, windowKey, row.usedMinutes, row.versusMedian),
+    trend: buildTrend(row.history, windowKey, row.usedMinutes),
     outages: null,
     reconciliation: "",
   };

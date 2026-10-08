@@ -3,7 +3,7 @@
  * hydrating, so this cannot be a React onClick.
  */
 export const OUTAGE_DISCLOSURE_SCRIPT = `(function () {
-  var rows = document.querySelectorAll("details[data-outages]");
+  var rows = document.querySelectorAll("details[data-disclosure]");
   for (var i = 0; i < rows.length; i++) {
     var details = rows[i];
     if (details.getAttribute("data-bound") === "true") continue;

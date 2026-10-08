@@ -19,7 +19,7 @@ export function scoredRow(overrides: Partial<Extract<TechnicalRow, { kind: "scor
     usedMinutes: 76,
     remainingMinutes: 0,
     burnRate: 3.5,
-    status: "breaching",
+    status: "breached",
     projectedExhaustion: null,
     windowStart: "2026-09-01T00:00:00.000Z",
     nextTierStartsAfterMinutes: null,

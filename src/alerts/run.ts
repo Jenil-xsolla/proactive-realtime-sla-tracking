@@ -42,7 +42,7 @@ type Change = "steady" | "up" | "down";
 const SCORED_RANK = {
   meeting: 0,
   at_risk: 1,
-  breaching: 2,
+  breached: 2,
 } as const;
 
 export function trackingScopeId(service: string): string {
@@ -169,7 +169,7 @@ function decide(row: TechnicalRow, seen: string | null): { change: Change; statu
 }
 
 function scoredChange(seen: string | null, next: ScoredRow["status"]): Change {
-  if (seen !== "meeting" && seen !== "at_risk" && seen !== "breaching") {
+  if (seen !== "meeting" && seen !== "at_risk" && seen !== "breached") {
     if (seen === null) {
       return next === "meeting" ? "steady" : "up";
     }
