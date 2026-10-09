@@ -18,9 +18,9 @@ hosts the Cloud SQL instance. Nobody deploys by hand: everything ships through a
 
 | What | Where in `neuronet-automations` |
 |---|---|
-| App code (this repo, once) | `services/sla-app/` |
-| `sla-dashboard` service | `registry.yaml` → `services.sla-dashboard`, `source: services/sla-app/` |
-| `sla-ingestion` service | `registry.yaml` → `services.sla-ingestion`, `source: services/sla-app/` |
+| App code (this repo, once) | `services/sla-dashboard/` |
+| `sla-dashboard` service | `registry.yaml` → `services.sla-dashboard`, `source: services/sla-dashboard/` |
+| `sla-ingestion` service | `registry.yaml` → `services.sla-ingestion`, `source: services/sla-dashboard/` |
 | Scheduled alert run | `jobs/sla-alert-run/` + `registry.yaml` → `jobs.sla-alert-run` with `schedule:` |
 
 Once the PR is reviewed and merged, the repo's CI (`.github/workflows/on-merge-deploy.yml`,
@@ -43,21 +43,17 @@ onboarding creates it. Both services and the alert job run as this one account.
 
 ## Build
 
-Both registry entries point `source:` at the same directory, `services/sla-app/`, which holds
-this repo's code including its `Dockerfile` (multi-stage: `pnpm install --frozen-lockfile`,
-`pnpm build` against `next.config.ts`'s `output: "standalone"`, then a minimal runtime stage that
-runs `node server.js` as a non-root user on port 8080). CI builds one image per entry
-(`us-docker.pkg.dev/xsolla-n8n-prod/neuronet/<service>:latest`) from that one directory, so the
-two services always run identical code. Do not split the code into per-service directories —
+Both registry entries point `source:` at the same directory, `services/sla-dashboard/`, which holds  
+this repo's code including its `Dockerfile` (multi-stage: `pnpm install --frozen-lockfile`,  
+`pnpm build` against `next.config.ts`'s `output: "standalone"`, then a minimal runtime stage that  
+runs `node server.js` as a non-root user on port 8080). CI builds one image per entry  
+(`us-docker.pkg.dev/xsolla-n8n-prod/neuronet/<service>:latest`) from that one directory, so the  
+two services always run identical code. Do not split the code into per-service directories —  
 nothing would then keep them identical.
-
-The runtime image does not include devDependencies (in particular `tsx`, which
-`pnpm db:migrate` needs — see **Database** below), so migrations run from a full checkout,
-never from the built image.
 
 ## Service: `sla-dashboard`
 
-- **Ingress:** `internal`. Requires authentication (`allow_unauthenticated: false`); the only
+- **Ingress:** `internal-and-cloud-load-balancing`. Requires authentication (`allow_unauthenticated: false`); the only
   invoker is the runtime service account, which `sla-ingestion` and the alert job both use.
 - **Environment:**
   - `SERVICE_ROLE=dashboard` — plain env var, not a secret
@@ -79,9 +75,9 @@ services:
     region: us-west2
     owner: j-patel
     service_account: neuronet-j-patel@xsolla-n8n-prod.iam.gserviceaccount.com
-    source: services/sla-app/
+    source: services/sla-dashboard/
     port: 8080
-    ingress: internal
+    ingress: internal-and-cloud-load-balancing
     allow_unauthenticated: false
     iam_invokers:
       - serviceAccount:neuronet-j-patel@xsolla-n8n-prod.iam.gserviceaccount.com
