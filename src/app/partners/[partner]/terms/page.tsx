@@ -1,6 +1,8 @@
 import { unstable_noStore as noStore } from "next/cache";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { alertsBadge, healthBadge, loadWorkspace } from "@/app/dashboard/load";
+import { buildNav, withWindow } from "@/app/dashboard/nav";
+import { Shell } from "@/app/shell/shell";
 import { getDatabase, readContractTermsForPartner } from "@/data";
 import { partnerLabel } from "@/feed";
 import { isPartnerId } from "@/registry";
@@ -17,7 +19,7 @@ export default async function PartnerTermsPage({
   searchParams,
 }: {
   params: Promise<{ partner: string }>;
-  searchParams: Promise<{ edit?: string | string[] }>;
+  searchParams: Promise<{ edit?: string | string[]; window?: string | string[] }>;
 }) {
   noStore();
   const { partner } = await params;
@@ -25,19 +27,35 @@ export default async function PartnerTermsPage({
     notFound();
   }
   const query = await searchParams;
+  const requested = Array.isArray(query.window) ? query.window[0] : query.window;
+  const workspace = await loadWorkspace({ window: requested });
+  if (workspace.role === "business") {
+    notFound();
+  }
+  const nav = buildNav({
+    windowKey: workspace.frame.windowKey,
+    role: workspace.role,
+    partners: workspace.partners,
+    alerts: alertsBadge(workspace.alerts, workspace.frame.windowKey),
+    health: healthBadge(workspace.health),
+    active: { kind: "partner", id: partner },
+  });
   const edit = Array.isArray(query.edit) ? query.edit[0] : query.edit;
   const row = await readContractTermsForPartner(getDatabase(), partner);
   const name = partnerLabel(partner);
   const editing = edit === "1";
 
   return (
-    <main className="mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-6 p-6">
-      <Link
-        href="/"
-        className="text-sm font-medium text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-      >
-        Downtime
-      </Link>
+    <Shell
+      nav={nav}
+      frame={{ ...workspace.frame, view: workspace.view }}
+      showWindow={false}
+      breadcrumb={[
+        { label: "Overview", href: withWindow("/", workspace.frame.windowKey) },
+        { label: name, href: withWindow(`/partners/${partner}`, workspace.frame.windowKey) },
+        { label: "Contract terms" },
+      ]}
+    >
       {row !== null && !editing ? (
         <TermsView
           partner={partner}
@@ -55,6 +73,6 @@ export default async function PartnerTermsPage({
           initial={row === null ? emptyContractForm() : formStateFromTerms(row.terms, row.version)}
         />
       )}
-    </main>
+    </Shell>
   );
 }

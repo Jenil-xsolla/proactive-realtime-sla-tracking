@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { UNUSABLE_REASONS } from "@/data";
 import {
@@ -9,8 +11,15 @@ import {
 } from "@/feed";
 import type { StatusReason } from "@/feed";
 import {
+  actualUptime,
+  alertScopeLabel,
+  alertStatusLabel,
   comparisonText,
+  consumedText,
+  creditText,
+  downLine,
   formatMinutes,
+  formatUptime,
   penaltyText,
   proratedWindowNote,
   reasonLabel,
@@ -167,5 +176,67 @@ describe("dashboard copy", () => {
 
   it("truncates by code point, so a surrogate pair is never split in half", () => {
     expect(truncate("😀😀😀", 2)).toBe("😀…");
+  });
+
+  it("derives actual uptime to date while open and over the full window once settled", () => {
+    expect(actualUptime({ usedMinutes: 21.6, windowMinutes: 43200, elapsedMinutes: 21600, phase: "open" })).toBeCloseTo(1 - 21.6 / 21600, 12);
+    expect(actualUptime({ usedMinutes: 21.6, windowMinutes: 43200, elapsedMinutes: 43200, phase: "settled" })).toBeCloseTo(1 - 21.6 / 43200, 12);
+    expect(actualUptime({ usedMinutes: 0, windowMinutes: 43200, elapsedMinutes: 0, phase: "open" })).toBe(1);
+    expect(formatUptime(0.9995)).toBe("99.950%");
+    expect(formatUptime(0.9976)).toBe("99.760%");
+  });
+
+  it("writes consumed, down, and credit text in product form", () => {
+    expect(consumedText(76, 21.6)).toBe("351.9% consumed");
+    expect(consumedText(5, 0)).toBe("Allowance is zero");
+    expect(downLine(76, 21.6)).toBe("76.0 / 21.6 min down");
+    expect(creditText("0%", "5%")).toBe("0% → 5%");
+  });
+
+  it("labels alert scopes and statuses", () => {
+    expect(alertScopeLabel("tracking:login", (id) => id.toUpperCase())).toBe("Service: LOGIN");
+    expect(alertScopeLabel("payments", (id) => `title:${id}`)).toBe("title:payments");
+    expect(alertStatusLabel("heads_up")).toBe("Heads-up");
+    expect(alertStatusLabel("at_risk")).toBe("At risk");
+    expect(alertStatusLabel("something_else")).toBe("something_else");
+  });
+
+  it("keeps every exported string free of em dashes", async () => {
+    const copy = await import("@/app/dashboard/copy");
+    for (const [name, value] of Object.entries(copy)) {
+      if (typeof value === "string") {
+        expect(value, name).not.toContain("—");
+      }
+    }
+  });
+
+  it("keeps status sentences out of components", () => {
+    const dirs = ["src/app/dashboard", "src/app/shell"];
+    const files = [
+      ...dirs.flatMap((dir) =>
+        readdirSync(path.join(process.cwd(), dir))
+          .filter((name) => name.endsWith(".tsx"))
+          .map((name) => path.join(dir, name)),
+      ),
+      "src/ui/budget-bar.tsx",
+      "src/ui/status-badge.tsx",
+    ];
+    expect(files.length).toBeGreaterThan(10);
+    const source = files.map((file) => readFileSync(path.join(process.cwd(), file), "utf8")).join("\n");
+    for (const sentence of [
+      "Downtime is within",
+      "Downtime has used",
+      "current pace",
+      "Most of the allowance",
+      "Most of the downtime",
+      "within the allowance",
+      "the next tier starts after",
+      "no penalty clause",
+      "not yet entered",
+      "Clause reference not yet recorded",
+      "prorated",
+    ]) {
+      expect(source, sentence).not.toContain(sentence);
+    }
   });
 });

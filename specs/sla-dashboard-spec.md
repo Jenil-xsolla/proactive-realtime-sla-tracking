@@ -23,12 +23,12 @@ This spec covers seven subsystems:
 | 2   | Shared feed and role shaping        | One                                       |
 | 3   | Technical (engineer) view           | One                                       |
 | 4   | Alerting                            | One                                       |
-| 5   | Business (CSM) view                 | One-and-a-half — gated on real terms only |
+| 5   | Business (CSM) view                 | One, built with the dashboard UI (specs/2026-10-07-dashboard-ui-design.md) |
 | 6   | Contract upload and term extraction | Two — gated on OQ-1                       |
 | 7   | Ingestion and corrections           | One — detailed in the companion design    |
 
 
-Slice one is independently useful and shippable. The business view follows as soon as real contracts land; it is deliberately not bundled with upload and extraction, which carry an unresolved governance dependency.
+Slice one is independently useful and shippable. The business view ships with the dashboard UI (`specs/2026-10-07-dashboard-ui-design.md`) on real terms only, and upload and extraction remain a separate slice because they carry an unresolved governance dependency.
 
 ---
 
@@ -95,6 +95,8 @@ This is the single most load-bearing detail in the design. Without it, historica
 `getViewer()` returns a role from an environment variable today and reads a session later — one file changes.
 
 Payload shaping happens on the server in two serialisers, not by conditional rendering in the client. The business payload never contains ticket keys, so they cannot leak through a missed conditional.
+
+Revised 2026-10-07: until SSO lands the role is a viewer preference. A top-bar toggle sets an `sla_view` cookie that overrides `VIEWER_ROLE`. The business view hides engineer-side material by construction, so nothing leaks through a missed conditional, but it is not an access boundary; SSO makes it one by replacing `resolveViewer`'s input with the session. The switch is a GET that sets a preference cookie, so a cross-site link can change a viewer's view; that is accepted because the view is a preference, not a boundary.
 
 ### AD-6 — No provisional data reaches any screen; terms are entered through the dashboard
 
@@ -456,6 +458,7 @@ type Evaluation =
       usedMinutes: number
       incidentCount: number
       comparison: BaselineComparison    // vs this partner's own recent months
+      history: MonthHistory[]
       outages: OutageRef[] }
   | { kind: 'scored'
       partner: PartnerId
@@ -469,8 +472,16 @@ type Evaluation =
       projectedExhaustion: Date | null
       penalty: { incurred: PenaltyFigure; projected: PenaltyFigure }
       reason: StatusReason
+      windowMinutes: number
+      elapsedMinutes: number
+      history: MonthHistory[]
+      comparison: BaselineComparison
       outages: OutageRef[] }
+
+type MonthHistory = { month: string; usedMinutes: number | null }  // "YYYY-MM"
 ```
+
+`MonthHistory` covers the eleven calendar months before the window's month, oldest first; the baseline comparison uses only the last six. `usedMinutes` is `null` for a month before data coverage began (2026-01-01): unknown, not clean, and never a zero. A covered month with no outages is `0`.
 
 The discriminated union is deliberate. A tracking-only result has no `status` field — not null, not `"N/A"`. The UI cannot render a fabricated status because there is nothing to bind to, and TypeScript forces both cases to be handled.
 
@@ -554,13 +565,13 @@ function getSlaFeed(input: {
 }): Promise<SlaFeed>
 ```
 
-Loads outages, resolves identities, fetches scopes, calls `evaluate()`, shapes by role. The dashboard calls it with the current user; the alert job calls it with a system viewer. That shared call is the mechanism behind GTOC-43's requirement that the two views cannot disagree.
+Loads outages, resolves identities, fetches scopes, calls `evaluate()`, shapes by role. The dashboard calls it with the current user; the alert job calls it with a system viewer. That shared call is the mechanism behind GTOC-43's requirement that the two views cannot disagree. `getSlaFeed` is unchanged by the view toggle: the dashboard resolves its viewer from the `sla_view` cookie first, then `VIEWER_ROLE`. The API routes and the alert job keep calling `getViewer()`, so the API follows the deployment default, not the cookie.
 
 ### 8.2 Serialisers
 
 `toTechnicalView` — retains PIR keys, per-outage rows, `partner_id` (merchant id), canonical severity, review provenance (`decision_type`, `reviewed_by`), `source` provenance once present, and the raw `StatusReason`. No attribution-confidence field: the data carries none.
 
-`toBusinessView` — status, consumed budget, projected exhaustion, credit percentage, plain-language sentence rendered from `StatusReason`. Contains no ticket key, no partner_id/merchant id, no reviewer identity, no internal severity label — nothing engineer- or audit-side.
+`toBusinessView` — status, consumed budget, projected exhaustion, credit percentage, plain-language sentence rendered from `StatusReason`. Contains no ticket key, no partner_id/merchant id, no reviewer identity, no internal severity label — nothing engineer- or audit-side. Also carries `partnerId` (registry slug), `target`, `windowMinutes`, `elapsedMinutes`, `history`, and `versusMedian`. The exclusion list is unchanged.
 
 ### 8.3 Routes
 
@@ -569,6 +580,8 @@ Loads outages, resolves identities, fetches scopes, calls `evaluate()`, shapes b
 | ------------------------------- | --------------------------------------------------------- |
 | `GET /api/sla/feed`             | Dashboard data                                            |
 | `GET /api/sla/health`           | Unusable rows, unresolved names, missing fields (GTOC-45) |
+| `GET /alerts`                   | Alert history page, technical role only                   |
+| `GET /health`                   | Data health page, technical role only                     |
 | `POST /api/internal/alerts/run` | Alert evaluation, called by Cloud Scheduler and by ingestion |
 | `POST /api/ingest/pir-approved` | Jira Automation webhook; `sla-ingestion` only              |
 | `POST /api/slack/interactions`  | Slack Correct button and modal; `sla-ingestion` only        |
@@ -606,18 +619,13 @@ This is the first place anyone can see partner-attributed downtime across all pi
 
 ### 9.2 Structure
 
-- **Header** — window selector, `asOf` timestamp, data-health chip
-- **Main** — table grouped by partner, one row per scope
-- **Expanded row** — one line per contributing outage, newest first: PIR key linking to `pir_url`, UTC start, computed end, minutes, canonical service, canonical severity, `decision_type` and `reviewed_by` with `reviewed_at`, `partner_id`, and `source` provenance. A boundary-crossing outage shows both full duration and minutes counted in this window; merged overlaps are visibly grouped. A reconciliation line — outages and minutes counted — must equal the collapsed row's total. `reason` is not shown; corrections are made in Slack, not on this screen.
-- **Backtest control** — per partner, runs historical replay once terms bind (see §11)
-
-When terms land, scored rows gain a budget bar and status badge in the same table. No second screen.
+Structure is defined in `specs/2026-10-07-dashboard-ui-design.md` §4 to §9a: a shell with a sidebar entry per partner, a per-month Overview, a page per partner, an alert history page, and a health page. The expanded outage record, the reconciliation line, and the backtest control are unchanged.
 
 ### 9.3 Three failure modes the UI must get right
 
 **Zero and error must never look alike.** A partner rendering `0` because a query failed looks like flawless uptime. Errors render as an explicit error state on affected rows.
 
-**The health panel is first-class, not a footer.** Dropped rows, unresolved partner names, unmatched service names — visible on the main screen. Hiding the count behind a tab reintroduces the failure the data layer was designed to prevent.
+**The health count is on every screen.** Every engineer screen carries the dropped-rows count in the sidebar Health badge, which links to `/health`. The detail lists live there, one click away. Hiding the *count* would reintroduce the failure the data layer was designed to prevent; the lists may move.
 
 **Closed windows show as settled, not final.** A late PIR can still move them.
 

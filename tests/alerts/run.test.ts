@@ -176,13 +176,13 @@ describe("runAlerts", () => {
     const report = await runAlerts({
       asOf: AS_OF,
       state: store,
-      loadFeed: async () => systemFeed([scoredRow("breaching")]),
+      loadFeed: async () => systemFeed([scoredRow("breached")]),
       fetch: okFetch(calls),
     });
 
     expect(report.alertsSent).toBe(2);
     expect(report.errors).toEqual([]);
-    expect(store.read(SCORED_KEY)?.status).toBe("breaching");
+    expect(store.read(SCORED_KEY)?.status).toBe("breached");
     expect(calls.map((call) => call.channel).sort()).toEqual(["engineer-id", "legal-id"]);
     for (const call of calls.filter((item) => item.channel !== "engineer-id")) {
       expect(call.body).not.toContain(SCORED_PIR);

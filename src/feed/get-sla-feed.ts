@@ -19,10 +19,13 @@ export async function getSlaFeed(input: {
   viewer: Viewer;
   sources?: FeedSources;
 }): Promise<SlaFeed> {
-  const partition = await readPartition(input.sources);
   const terms = readTerms(input.sources);
-  const scopes = await scopesFor(terms, input.asOf);
-  const invalidTerms = await readInvalidTerms(terms);
+  const [partition, scopes, invalidTerms, ingestionResult] = await Promise.all([
+    readPartition(input.sources),
+    scopesFor(terms, input.asOf),
+    readInvalidTerms(terms),
+    readIngestionHealth(input.sources),
+  ]);
   const evaluations = evaluate({
     outages: partition.usable,
     scopes,
@@ -30,7 +33,6 @@ export async function getSlaFeed(input: {
     asOf: input.asOf,
   });
   const health = summarizeOutageHealth(partition);
-  const ingestionResult = await readIngestionHealth(input.sources);
   const asOf = input.asOf.toISOString();
 
   if (input.viewer.role === "business") {

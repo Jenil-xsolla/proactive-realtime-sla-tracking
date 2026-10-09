@@ -11,23 +11,32 @@ export function toBusinessView(
       return {
         kind: "tracking_only",
         partner: partnerName(evaluation.partner),
+        partnerId: evaluation.partner,
         service: serviceName(evaluation.service),
         usedMinutes: evaluation.usedMinutes,
         incidentCount: evaluation.incidentCount,
         comparison: comparisonSentence(evaluation.comparison),
+        history: evaluation.history,
+        versusMedian: versusMedian(evaluation.comparison),
       };
     }
 
     return {
       kind: "scored",
       partner: partnerName(evaluation.partner),
+      partnerId: evaluation.partner,
       scope: scopeLabel(scopes, evaluation.partner, evaluation.scopeId),
       status: evaluation.status,
+      target: evaluation.target,
       consumedBudget: {
         usedMinutes: evaluation.usedMinutes,
         allowedMinutes: evaluation.allowedMinutes,
         fraction: evaluation.reason.consumedFraction,
       },
+      windowMinutes: evaluation.windowMinutes,
+      elapsedMinutes: evaluation.elapsedMinutes,
+      history: evaluation.history,
+      versusMedian: versusMedian(evaluation.comparison),
       projectedExhaustion: instant(evaluation.projectedExhaustion),
       creditPercentage: {
         incurred: creditReport(evaluation.penalty.incurred),
@@ -69,6 +78,10 @@ function comparisonSentence(comparison: BaselineComparison): string {
     return `Below this partner's ${span} median.`;
   }
   return `Equal to this partner's ${span} median.`;
+}
+
+function versusMedian(comparison: BaselineComparison): "above" | "equal" | "below" | null {
+  return comparison.kind === "compared" ? comparison.versusMedian : null;
 }
 
 function creditReport(figure: PenaltyFigure): BusinessCredit {

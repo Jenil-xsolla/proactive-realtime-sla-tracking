@@ -1,4 +1,4 @@
-import { PARTNERS, SEVERITIES, SERVICES } from "@/registry";
+import { contractedServiceIds, PARTNERS, SEVERITIES, SERVICES } from "@/registry";
 
 export type PilotPartner = {
   id: string;
@@ -22,4 +22,23 @@ export function serviceLabel(id: string): string {
 
 export function severityLabel(id: string): string {
   return SEVERITIES.find((severity) => severity.id === id)?.displayName ?? id;
+}
+
+/** External merchant ids from the registry. Empty for an unknown id. Technical role only. */
+export function partnerMerchantIds(id: string): number[] {
+  return [...(PARTNERS.find((partner) => partner.id === id)?.merchantIds ?? [])];
+}
+
+/** Scope title from its contracted services, deduplicating a service already covered by one it names. */
+export function scopeTitle(input: {
+  services: readonly string[];
+  includesScopedServices: boolean | null;
+  scopeId: string;
+}): string {
+  if (input.services.length > 0) {
+    return contractedServiceIds(input.services).map((service) => serviceLabel(service)).join(", ");
+  }
+  if (input.includesScopedServices === true) return "All services";
+  if (input.includesScopedServices === false) return "General Scope";
+  return input.scopeId;
 }

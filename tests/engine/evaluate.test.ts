@@ -322,7 +322,7 @@ describe("evaluate", () => {
       "payments",
     );
 
-    expect(row.status).toBe("breaching");
+    expect(row.status).toBe("breached");
     expect(row.reason.rule).toBe("breaching");
     expect(row.reason.fired).toEqual([]);
     expect(row.reason.elapsedFraction).toBeLessThan(MIN_ELAPSED);
@@ -417,7 +417,7 @@ describe("evaluate", () => {
 
     expect(withOutage.allowedMinutes).toBe(0);
     expect(withOutage.usedMinutes).toBe(5);
-    expect(withOutage.status).toBe("breaching");
+    expect(withOutage.status).toBe("breached");
     expect(withOutage.reason.consumedFraction).toBeNull();
     expect(Number.isFinite(withOutage.burnRate)).toBe(true);
     expect(Number.isFinite(withOutage.remainingMinutes)).toBe(true);
@@ -437,7 +437,7 @@ describe("evaluate", () => {
     expect(clean.allowedMinutes).toBe(0);
     expect(clean.usedMinutes).toBe(0);
     // Section 7.4 writes breaching as used >= allowed, which includes 0 >= 0.
-    expect(clean.status).toBe("breaching");
+    expect(clean.status).toBe("breached");
     expect(clean.reason.consumedFraction).toBeNull();
     expect(Number.isFinite(clean.burnRate)).toBe(true);
     expect(Number.isFinite(creditOf(clean.penalty.incurred).creditFraction)).toBe(true);
@@ -649,7 +649,7 @@ describe("evaluate", () => {
     );
 
     expect(row.usedMinutes).toBeCloseTo(row.allowedMinutes, 8);
-    expect(row.status).toBe("breaching");
+    expect(row.status).toBe("breached");
     expect(row.reason.rule).toBe("breaching");
   });
 
@@ -1042,6 +1042,88 @@ describe("evaluate", () => {
     });
   });
 
+  it("reports eleven months of history with null before coverage and zero for a covered quiet month", () => {
+    const april = monthWindow(2026, 3);
+    const results = evaluate({
+      outages: [
+        outage({ pirKey: "PIR-DEC", incidentStarted: new Date(Date.UTC(2025, 11, 15)), outageMinutes: 1000 }),
+        outage({ pirKey: "PIR-JAN", incidentStarted: new Date(Date.UTC(2026, 0, 15)), outageMinutes: 10 }),
+        outage({ pirKey: "PIR-MAR", incidentStarted: new Date(Date.UTC(2026, 2, 15)), outageMinutes: 50 }),
+        outage({ pirKey: "PIR-APR", incidentStarted: new Date(Date.UTC(2026, 3, 15)), outageMinutes: 40 }),
+      ],
+      scopes: [partner([])],
+      window: april,
+      asOf: atEnd(april),
+    });
+    expect(expectTracking(results).history).toEqual([
+      { month: "2025-05", usedMinutes: null },
+      { month: "2025-06", usedMinutes: null },
+      { month: "2025-07", usedMinutes: null },
+      { month: "2025-08", usedMinutes: null },
+      { month: "2025-09", usedMinutes: null },
+      { month: "2025-10", usedMinutes: null },
+      { month: "2025-11", usedMinutes: null },
+      { month: "2025-12", usedMinutes: null },
+      { month: "2026-01", usedMinutes: 10 },
+      { month: "2026-02", usedMinutes: 0 },
+      { month: "2026-03", usedMinutes: 50 },
+    ]);
+  });
+
+  it("takes the comparison from the last six months of history only", () => {
+    const september = monthWindow(2026, 8);
+    const recent = [3, 4, 5, 6, 7, 8].map((month) =>
+      outage({ pirKey: `PIR-${month}`, incidentStarted: new Date(Date.UTC(2026, month - 1, 15)), outageMinutes: 10 }),
+    );
+    const old = outage({ pirKey: "PIR-JAN", incidentStarted: new Date(Date.UTC(2026, 0, 15)), outageMinutes: 1000 });
+    const current = outage({ pirKey: "PIR-SEP", incidentStarted: new Date(Date.UTC(2026, 8, 15)), outageMinutes: 20 });
+    const results = expectTracking(evaluate({ outages: [old, ...recent, current], scopes: [partner([])], window: september, asOf: atEnd(september) }));
+    expect(results.history).toHaveLength(11);
+    expect(results.history.find((entry) => entry.month === "2026-01")?.usedMinutes).toBe(1000);
+    expect(results.comparison).toEqual({
+      kind: "compared",
+      coveredMonths: 6,
+      monthsWithDowntime: 6,
+      medianMinutes: 10,
+      currentMinutes: 20,
+      versusMedian: "above",
+    });
+  });
+
+  it("gives a scored scope the same history and comparison as its outages would give a tracking row", () => {
+    const april = monthWindow(2026, 3);
+    const rows = [
+      outage({ pirKey: "PIR-JAN", incidentStarted: new Date(Date.UTC(2026, 0, 15)), outageMinutes: 10 }),
+      outage({ pirKey: "PIR-FEB", incidentStarted: new Date(Date.UTC(2026, 1, 15)), outageMinutes: 30 }),
+      outage({ pirKey: "PIR-MAR", incidentStarted: new Date(Date.UTC(2026, 2, 15)), outageMinutes: 50 }),
+      outage({ pirKey: "PIR-APR", incidentStarted: new Date(Date.UTC(2026, 3, 15)), outageMinutes: 40 }),
+    ];
+    const scored = expectScored(
+      evaluate({ outages: rows, scopes: [partner([serviceScope("s", "payments")])], window: april, asOf: atEnd(april) }),
+      "s",
+    );
+    const tracking = expectTracking(evaluate({ outages: rows, scopes: [partner([])], window: april, asOf: atEnd(april) }));
+    expect(scored.history).toEqual(tracking.history);
+    expect(scored.comparison).toEqual(tracking.comparison);
+    expect(scored.comparison).toMatchObject({ kind: "compared", medianMinutes: 30, versusMedian: "above" });
+  });
+
+  it("reports window and elapsed minutes, prorated and clamped", () => {
+    const june = monthWindow(2027, 5);
+    const scopes = [partner([serviceScope("s", "payments", { effectiveFrom: new Date("2027-06-15T00:00:00.000Z") })])];
+    const before = expectScored(
+      evaluate({ outages: [], scopes, window: june, asOf: new Date("2027-06-16T00:00:00.000Z") }),
+      "s",
+    );
+    expect(before.windowMinutes).toBe(16 * 24 * 60);
+    expect(before.elapsedMinutes).toBe(24 * 60);
+    const after = expectScored(
+      evaluate({ outages: [], scopes, window: june, asOf: new Date("2027-08-01T00:00:00.000Z") }),
+      "s",
+    );
+    expect(after.elapsedMinutes).toBe(after.windowMinutes);
+  });
+
   it("keeps an outage that exactly meets a threshold in the higher band", () => {
     const tiers = {
       target: 0.9995,
@@ -1316,7 +1398,7 @@ describe("evaluate", () => {
       }),
       "payments",
     );
-    expect(row.status).toBe("breaching");
+    expect(row.status).toBe("breached");
     expect(row.allowedMinutes).toBe(21.6);
     expect(row.penalty.incurred).toMatchObject({ kind: "credit", creditFraction: 0 });
     expect(row.nextTierStartsAfterMinutes).toBe(216);

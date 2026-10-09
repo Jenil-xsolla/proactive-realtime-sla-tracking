@@ -25,7 +25,7 @@ export function BacktestPanel({
                   <TableHeaderCell>Month</TableHeaderCell>
                   <TableHeaderCell>Scope</TableHeaderCell>
                   <TableHeaderCell numeric>Steps</TableHeaderCell>
-                  <TableHeaderCell numeric>Breaching</TableHeaderCell>
+                  <TableHeaderCell numeric>Breached</TableHeaderCell>
                   <TableHeaderCell numeric>Trend</TableHeaderCell>
                   <TableHeaderCell numeric>Level</TableHeaderCell>
                   <TableHeaderCell numeric>Meeting</TableHeaderCell>

@@ -4,8 +4,8 @@ import { partitionOutages, readContractTerms, saveContractTerms, type IngestionH
 import { getSlaFeed } from "@/feed";
 import { DbTermsProvider, loadContractFile, type ContractFile, type ContractScope } from "@/terms";
 import { INVALID_CONTRACT_TERMS_LABEL } from "@/app/dashboard/copy";
-import { buildReadyDashboard } from "@/app/dashboard/model";
-import { TechnicalDashboard } from "@/app/dashboard/technical-dashboard";
+import { HealthPage } from "@/app/dashboard/health-page";
+import { buildHealth } from "@/app/dashboard/model";
 import { createTestDatabase, type TestDatabase } from "../support/database";
 
 const AS_OF = new Date("2026-06-15T12:00:00.000Z");
@@ -143,8 +143,12 @@ describe("DbTermsProvider", () => {
       }),
     ]);
 
-    const model = buildReadyDashboard({ asOf: AS_OF, windowKey: "2026-06", feed });
-    const html = renderToStaticMarkup(<TechnicalDashboard model={model} />);
+    const html = renderToStaticMarkup(
+      <HealthPage
+        health={buildHealth({ health: feed.health, ingestion: feed.ingestion, invalidTerms: feed.invalidTerms })}
+        unusable={[]}
+      />,
+    );
     expect(html).toContain(INVALID_CONTRACT_TERMS_LABEL);
     expect(html).toContain("Twitch");
     expect(html).toContain("0 to 100");

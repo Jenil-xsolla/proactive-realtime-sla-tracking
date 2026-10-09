@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET, PUT } from "@/app/api/sla/contract-terms/[partner]/route";
-import { ADD_CONTRACT_TERMS, VIEW_TERMS } from "@/app/dashboard/copy";
-import { buildPartnerGroups } from "@/app/dashboard/model";
-import { PartnerTable } from "@/app/dashboard/partner-table";
+import { ADD_CONTRACT_TERMS, CONTRACT_ON_FILE, VIEW_TERMS } from "@/app/dashboard/copy";
+import { termsLinkFor } from "@/app/dashboard/overview";
+import { buildPartnerPage } from "@/app/dashboard/partner-page";
+import { buildTechnicalPartners } from "@/app/dashboard/view";
 import PartnerTermsPage from "@/app/partners/[partner]/terms/page";
 import {
   partitionOutages,
@@ -30,6 +31,8 @@ vi.mock("@/data", async (importOriginal) => {
     },
   };
 });
+
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 
 vi.mock("next/navigation", () => ({
   notFound: () => {
@@ -120,7 +123,18 @@ function ingestion(): IngestionHealth {
 describe("contract terms routes and technical view", () => {
   let testDb: TestDatabase | undefined;
 
+  const originalRole = process.env.VIEWER_ROLE;
+
+  beforeEach(() => {
+    process.env.VIEWER_ROLE = "technical";
+  });
+
   afterEach(async () => {
+    if (originalRole === undefined) {
+      delete process.env.VIEWER_ROLE;
+    } else {
+      process.env.VIEWER_ROLE = originalRole;
+    }
     dbBox.current = undefined;
     await testDb?.close();
     testDb = undefined;
@@ -133,17 +147,21 @@ describe("contract terms routes and technical view", () => {
   }
 
   it("offers Add contract terms when a partner has no row, and View terms when one exists", () => {
-    const html = renderToStaticMarkup(
-      <PartnerTable partners={buildPartnerGroups([], new Set(["roblox"]))} />,
-    );
-    const scopely = partnerSection(html, "Scopely");
-    const roblox = partnerSection(html, "Roblox");
-    expect(scopely).toContain(ADD_CONTRACT_TERMS);
-    expect(scopely).toContain('href="/partners/scopely/terms"');
-    expect(scopely).not.toContain(VIEW_TERMS);
-    expect(roblox).toContain(VIEW_TERMS);
-    expect(roblox).toContain('href="/partners/roblox/terms"');
-    expect(roblox).not.toContain(ADD_CONTRACT_TERMS);
+    const partners = buildTechnicalPartners([], "open", "2026-06", {
+      withTerms: new Set(["roblox"]),
+      bound: new Set<string>(),
+      draft: new Set<string>(),
+    });
+    const scopely = partners.find((partner) => partner.id === "scopely");
+    const roblox = partners.find((partner) => partner.id === "roblox");
+    if (scopely === undefined || roblox === undefined) throw new Error("missing partner");
+    expect(termsLinkFor(scopely)).toEqual({ label: ADD_CONTRACT_TERMS, href: "/partners/scopely/terms" });
+    expect(termsLinkFor(roblox)).toEqual({ label: VIEW_TERMS, href: "/partners/roblox/terms" });
+
+    const page = (partner: typeof scopely) =>
+      buildPartnerPage({ partner, phase: "open", windowKey: "2026-06", failure: null, role: "technical" });
+    expect(page(scopely).termsLink).toEqual({ label: ADD_CONTRACT_TERMS, href: "/partners/scopely/terms" });
+    expect(page(roblox).termsLink).toEqual({ label: CONTRACT_ON_FILE, href: "/partners/roblox/terms" });
   });
 
   it("adds terms, shows them, then shows an edit", async () => {
@@ -169,6 +187,10 @@ describe("contract terms routes and technical view", () => {
         searchParams: Promise.resolve({}),
       }),
     );
+    expect(view).toMatch(/<a href="\/\?window=[^"]+"[^>]*>Overview<\/a>/);
+    expect(view).toMatch(/<a href="\/partners\/roblox\?window=[^"]+"[^>]*>Roblox<\/a>/);
+    expect(view).toContain('<span class="text-foreground">Contract terms</span>');
+    expect(view).not.toContain(">Downtime<");
     expect(view).toContain("FIXTURE clause alpha");
     expect(view).toContain("97.25%");
     expect(view).toContain("Draft. These terms are not scoring.");
@@ -205,6 +227,21 @@ describe("contract terms routes and technical view", () => {
     expect(again).toContain("96.5%");
     expect(again).not.toContain("FIXTURE clause alpha");
     expect(again).toContain("Last saved by grace");
+  });
+
+  it("keeps a window passed in the query on the sidebar links, and hides the month picker", async () => {
+    await openDb();
+    const html = renderToStaticMarkup(
+      await PartnerTermsPage({
+        params: Promise.resolve({ partner: "niantic" }),
+        searchParams: Promise.resolve({ window: "2026-06" }),
+      }),
+    );
+    const sidebar = /<nav[\s\S]*?<\/nav>/.exec(html)?.[0] ?? "";
+    expect(sidebar).toContain('href="/?window=2026-06"');
+    expect(sidebar).toContain('href="/partners/niantic?window=2026-06"');
+    expect(html).toContain('href="/partners/niantic?window=2026-06"');
+    expect(html).not.toContain("Window");
   });
 
   it("does not score a draft, and scores once the same terms are activated", async () => {
@@ -275,6 +312,17 @@ describe("contract terms routes and technical view", () => {
     expect(await readContractTerms(database.db)).toEqual([]);
   });
 
+  it("returns not found for the business role", async () => {
+    await openDb();
+    process.env.VIEWER_ROLE = "business";
+    await expect(
+      PartnerTermsPage({
+        params: Promise.resolve({ partner: "roblox" }),
+        searchParams: Promise.resolve({}),
+      }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+  });
+
   it("renders an empty add form with no contract figures", async () => {
     await openDb();
     const html = renderToStaticMarkup(
@@ -297,13 +345,6 @@ describe("contract terms routes and technical view", () => {
 function inputValue(html: string, id: string): string | undefined {
   const tag = html.match(/<input\b[^>]*>/g)?.find((item) => item.includes(`id="${id}"`));
   return tag?.match(/\bvalue="([^"]*)"/)?.[1];
-}
-
-function partnerSection(html: string, name: string): string {
-  const start = html.indexOf(`>${name}<`);
-  expect(start).toBeGreaterThan(-1);
-  const next = html.indexOf("<h3", start + 1);
-  return html.slice(start, next === -1 ? undefined : next);
 }
 
 async function feedFor(database: TestDatabase) {

@@ -4,13 +4,16 @@ export { getSlaHealth } from "./health";
 export {
   listPilotPartners,
   partnerLabel,
+  partnerMerchantIds,
+  scopeTitle,
   serviceLabel,
   severityLabel,
   type PilotPartner,
 } from "./labels";
 export { toTechnicalView } from "./technical";
-export type { BaselineComparison, PenaltyFigure, StatusReason } from "@/engine";
+export type { BaselineComparison, MonthHistory, PenaltyFigure, StatusReason } from "@/engine";
 export type {
+  BusinessCredit,
   BusinessRow,
   FeedSources,
   IngestionCounts,
@@ -23,7 +26,7 @@ export type {
   TechnicalRow,
   UnusableRow,
 } from "./types";
-export { getViewer, type Viewer, type ViewerRole } from "./viewer";
+export { VIEW_COOKIE, getViewer, resolveViewer, type Viewer, type ViewerRole } from "./viewer";
 export {
   EARLIEST_DATA_MONTH,
   calendarMonthWindow,

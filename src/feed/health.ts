@@ -10,10 +10,12 @@ export async function getSlaHealth(input: {
   viewer: Viewer;
   sources?: FeedSources;
 }): Promise<SlaHealth> {
-  const partition = await readPartition(input.sources);
+  const [partition, ingestionResult, invalidTerms] = await Promise.all([
+    readPartition(input.sources),
+    readIngestionHealth(input.sources),
+    readInvalidTerms(readTerms(input.sources)),
+  ]);
   const health = summarizeOutageHealth(partition);
-  const ingestionResult = await readIngestionHealth(input.sources);
-  const invalidTerms = await readInvalidTerms(readTerms(input.sources));
   const asOf = input.asOf.toISOString();
 
   if (input.viewer.role === "business") {

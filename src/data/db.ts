@@ -15,8 +15,17 @@ export const schema = {
   slaContractTerms,
 };
 
+/**
+ * pg's default idle timeout is 10s, which closes every connection between
+ * page loads and makes each one pay connection setup again. Holding them
+ * longer needs keepAlive and an error listener: an idle client the server
+ * drops emits "error" on the pool, and with no listener that ends the process.
+ */
 export function createDatabase(connectionString: string) {
-  const pool = new Pool({ connectionString });
+  const pool = new Pool({ connectionString, max: 10, idleTimeoutMillis: 900_000, keepAlive: true });
+  pool.on("error", (error) => {
+    console.error("[db] idle client", error);
+  });
   return drizzle(pool, { schema });
 }
 

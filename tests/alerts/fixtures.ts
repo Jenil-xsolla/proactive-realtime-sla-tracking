@@ -17,7 +17,7 @@ export function systemFeed(rows: TechnicalRow[], asOf = "2026-09-15T12:00:00.000
 }
 
 export function scoredRow(
-  status: "meeting" | "at_risk" | "breaching",
+  status: "meeting" | "at_risk" | "breached",
 ): Extract<TechnicalRow, { kind: "scored" }> {
   return {
     kind: "scored",
@@ -32,6 +32,10 @@ export function scoredRow(
     projectedExhaustion: null,
     windowStart: "2026-09-01T00:00:00.000Z",
     nextTierStartsAfterMinutes: null,
+    windowMinutes: 43200,
+    elapsedMinutes: 21600,
+    history: [],
+    comparison: { kind: "insufficient_history", coveredMonths: 0, monthsWithDowntime: 0 },
     sourceClause: "Schedule A",
     services: ["payments"],
     includesScopedServices: null,
@@ -40,7 +44,7 @@ export function scoredRow(
       projected: { kind: "credit", creditFraction: 0.25, amount: null },
     },
     reason: {
-      rule: status === "breaching" ? "breaching" : status === "at_risk" ? "trend" : "meeting",
+      rule: status === "breached" ? "breaching" : status === "at_risk" ? "trend" : "meeting",
       fired: status === "at_risk" ? ["trend"] : [],
       elapsedFraction: 0.5,
       consumedFraction: 0.9,
@@ -81,6 +85,7 @@ export function trackingRow(input: {
     usedMinutes: input.usedMinutes,
     incidentCount: 1,
     comparison: input.comparison,
+    history: [],
     outages: [
       {
         pirKey: "GTO-100",

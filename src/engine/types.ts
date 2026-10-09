@@ -94,6 +94,12 @@ export type OutageRef<S extends string = string> = {
 };
 
 /**
+ * Used minutes for one prior calendar month. `null` when the month starts
+ * before data coverage: unknown, never a clean zero.
+ */
+export type MonthHistory = { month: string; usedMinutes: number | null };
+
+/**
  * Comparison against the covered prior months only. A month that starts
  * before data coverage is omitted, never counted as zero downtime.
  */
@@ -167,6 +173,8 @@ export type Evaluation<P extends string = string, S extends string = string> =
       usedMinutes: number;
       incidentCount: number;
       comparison: BaselineComparison;
+      /** Six calendar months before the window's month, oldest first. */
+      history: MonthHistory[];
       outages: OutageRef<S>[];
     }
   | {
@@ -178,7 +186,7 @@ export type Evaluation<P extends string = string, S extends string = string> =
       usedMinutes: number;
       remainingMinutes: number;
       burnRate: number;
-      status: "meeting" | "at_risk" | "breaching";
+      status: "meeting" | "at_risk" | "breached";
       projectedExhaustion: Date | null;
       /** First instant this scope is scored in the requested window. */
       windowStart: Date;
@@ -187,6 +195,14 @@ export type Evaluation<P extends string = string, S extends string = string> =
        * Null when the penalty is not tiered, or the scope is already in the last tier.
        */
       nextTierStartsAfterMinutes: number | null;
+      /** Full scored window length in minutes. Shorter than the calendar month when prorated. */
+      windowMinutes: number;
+      /** Minutes of the scored window elapsed at asOf, clamped to [0, windowMinutes]. */
+      elapsedMinutes: number;
+      /** Six calendar months before the window's month, oldest first, over this scope's services. */
+      history: MonthHistory[];
+      /** Same baseline the tracking row uses, over this scope's outages. Descriptive only. */
+      comparison: BaselineComparison;
       penalty: { incurred: PenaltyFigure; projected: PenaltyFigure };
       reason: StatusReason;
       outages: OutageRef<S>[];

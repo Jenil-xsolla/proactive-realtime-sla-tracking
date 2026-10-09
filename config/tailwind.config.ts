@@ -39,6 +39,7 @@ const config: Config = {
       destructive: "var(--destructive)",
       danger: "var(--danger)",
       warning: "var(--warning)",
+      success: "var(--success)",
       chart: {
         1: "var(--chart-1)",
         2: "var(--chart-2)",
@@ -51,6 +52,7 @@ const config: Config = {
     borderRadius: {
       none: "0",
       DEFAULT: "var(--radius)",
+      full: "9999px",
     },
     fontFamily: {
       sans: "var(--font-sans)",
